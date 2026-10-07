@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, useId, watch } from 'vue'
 import { PENDING, type Learner } from '../api'
-import { localized, t } from '../i18n'
+import { coachName } from '../coaches'
+import { locale, localized, t } from '../i18n'
 import { communityFor } from '../whatsapp'
 
 const props = defineProps<{ learner: Learner }>()
@@ -35,7 +36,7 @@ const known = (v: string | null) => (v === PENDING ? null : v)
 
 const fields = computed(() => [
   { label: t.value.card.schedule, value: localized(props.learner.schedule) },
-  { label: t.value.card.coach, value: props.learner.coach_name },
+  { label: t.value.card.coach, value: coachName(props.learner.coach_name, locale.value) },
   { label: t.value.card.room, value: known(props.learner.room) },
   { label: t.value.card.email, value: known(props.learner.default_email) },
 ])
