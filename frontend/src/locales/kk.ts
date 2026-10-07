@@ -1,3 +1,4 @@
+import type { ChecklistIconName } from '../components/ChecklistIcon.vue'
 import type { Messages } from './ru'
 
 const kk: Messages = {
@@ -83,7 +84,7 @@ const kk: Messages = {
     markDone: "Қадамды орындалды деп белгілеу",
     steps: [
       {
-        icon: "📲",
+        icon: 'chat' as ChecklistIconName,
         title: "WhatsApp қауымдастығы",
         items: [
           "**Оқушы:** Өз тобың мен ағымыңның ресми WhatsApp қауымдастығында екеніңе көз жеткіз (маңызды хабарландырулар, кесте және сілтемелер дәл сонда жарияланады).",
@@ -91,7 +92,7 @@ const kk: Messages = {
         ],
       },
       {
-        icon: "📧",
+        icon: 'mail' as ChecklistIconName,
         title: "Телефондағы TUMO поштасы",
         items: [
           "Телефоныңдағы Gmail қосымшасы арқылы `@tumo.world` корпоративтік поштаңа кір (iOS/Android-тың кірістірілген пошта қосымшалары корпоративтік аккаунттармен дұрыс жұмыс істемеуі мүмкін).",
@@ -99,7 +100,7 @@ const kk: Messages = {
         ],
       },
       {
-        icon: "🔐",
+        icon: 'lock' as ChecklistIconName,
         title: "Логин және құпия сөз",
         items: [
           "Логинді (поштаны) және құпия сөзді жазбаларға, құпия сөз менеджеріне сақта немесе мессенджердегі «Таңдаулылар / Saved Messages» бөліміне өзіңе жібер.",
@@ -107,7 +108,7 @@ const kk: Messages = {
         ],
       },
       {
-        icon: "👤",
+        icon: 'face' as ChecklistIconName,
         title: "Орталыққа кіру және Face ID",
         items: [
           "Бірінші күні сені ресепшенде қарсы алып, өтуге көмектеседі.",
@@ -115,7 +116,7 @@ const kk: Messages = {
         ],
       },
       {
-        icon: "💻",
+        icon: 'monitor' as ChecklistIconName,
         title: "Mac (iMac) компьютерінде аккаунттан шығу",
         items: [
           "**Сеансты аяқтау:** Әр сабақтың соңында басқа ешкім сенің профиліңді пайдаланбауы үшін компьютердегі аккаунтыңнан міндетті түрде шық.",
@@ -123,14 +124,14 @@ const kk: Messages = {
         ],
       },
       {
-        icon: "💧",
+        icon: 'water' as ChecklistIconName,
         title: "Су ішу режимі",
         items: [
           "Өзіңмен жеке су бөтелкесін ала кел — орталықта кулерлер орнатылған, үзіліс кезінде бөтелкені сол жерден толтыруға болады.",
         ],
       },
       {
-        icon: "🤝",
+        icon: 'help' as ChecklistIconName,
         title: "Залдағы көмек (Коучтар)",
         items: [
           "Коучыңның атын есте сақта!",

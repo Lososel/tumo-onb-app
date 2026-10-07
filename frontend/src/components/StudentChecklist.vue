@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { format, t } from '../i18n'
 import SectionTitle from './SectionTitle.vue'
+import ChecklistIcon from './ChecklistIcon.vue'
 
 // Ticks are a per-device convenience only: kept in this browser, never sent anywhere.
 const KEY = 'tumo.checklist'
@@ -55,7 +56,9 @@ function tokens(line: string): Token[] {
 
 <template>
   <section id="checklist" aria-labelledby="checklist-title" class="scroll-mt-6">
-    <SectionTitle id="checklist-title">📋 {{ t.checklist.title }}</SectionTitle>
+    <SectionTitle id="checklist-title">
+      <ChecklistIcon name="clipboard" class="-mt-1 mr-1 inline-block size-[0.9em] align-middle" />{{ t.checklist.title }}
+    </SectionTitle>
 
     <p class="mt-6 text-base leading-relaxed text-slate-700 sm:mt-8 sm:text-lg">{{ t.checklist.intro }}</p>
 
@@ -72,9 +75,9 @@ function tokens(line: string): Token[] {
       >
         <div class="flex items-start gap-3 sm:gap-4">
           <span
-            class="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-brand-50 text-2xl"
+            class="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-brand-50 text-brand-500"
             aria-hidden="true"
-          >{{ step.icon }}</span>
+          ><ChecklistIcon :name="step.icon" class="size-6" /></span>
           <h3 class="min-w-0 flex-1 self-center font-display text-lg leading-snug font-black text-ink sm:text-xl">
             <span class="text-brand-500">{{ i + 1 }}.</span> {{ step.title }}
           </h3>

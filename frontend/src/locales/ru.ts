@@ -1,3 +1,5 @@
+import type { ChecklistIconName } from '../components/ChecklistIcon.vue'
+
 const ru = {
   meta: { title: 'TUMO Astana — график обучения' },
   lang: { ru: 'РУС', kk: 'ҚАЗ', label: 'Язык сайта' },
@@ -81,7 +83,7 @@ const ru = {
     markDone: "Отметить шаг как выполненный",
     steps: [
       {
-        icon: "📲",
+        icon: 'chat' as ChecklistIconName,
         title: "Сообщество в WhatsApp",
         items: [
           "**Ученик:** Убедись, что ты состоишь в официальном WhatsApp-сообществе своей группы и потока (именно там публикуются важные анонсы, расписание и ссылки).",
@@ -89,7 +91,7 @@ const ru = {
         ],
       },
       {
-        icon: "📧",
+        icon: 'mail' as ChecklistIconName,
         title: "Почта TUMO на телефоне",
         items: [
           "Войди в свою корпоративную почту `@tumo.world` через приложение Gmail на телефоне (нативные почтовые клиенты iOS/Android могут сбоить с корпоративными учётными записями).",
@@ -97,7 +99,7 @@ const ru = {
         ],
       },
       {
-        icon: "🔐",
+        icon: 'lock' as ChecklistIconName,
         title: "Логин и Пароль",
         items: [
           "Сохрани логин (почту) и пароль в заметках, менеджере паролей или отправь себе в «Избранное / Saved Messages» в мессенджере.",
@@ -105,7 +107,7 @@ const ru = {
         ],
       },
       {
-        icon: "👤",
+        icon: 'face' as ChecklistIconName,
         title: "Вход в центр и Face ID",
         items: [
           "В первый день тебя встретят на ресепшен и помогут пройти.",
@@ -113,7 +115,7 @@ const ru = {
         ],
       },
       {
-        icon: "💻",
+        icon: 'monitor' as ChecklistIconName,
         title: "Выход из аккаунта на Mac (iMac)",
         items: [
           "**Завершение сессии:** В конце каждого занятия обязательно выходи из своего аккаунта на компьютере, чтобы никто другой не использовал твой профиль.",
@@ -121,14 +123,14 @@ const ru = {
         ],
       },
       {
-        icon: "💧",
+        icon: 'water' as ChecklistIconName,
         title: "Питьевой режим",
         items: [
           "Возьми с собой личную бутылку для воды — в центре установлены кулеры, где её можно будет наполнять во время перерывов.",
         ],
       },
       {
-        icon: "🤝",
+        icon: 'help' as ChecklistIconName,
         title: "Помощь в зале (Коучи)",
         items: [
           "Запомни имя своего коуча!",
