@@ -7,6 +7,7 @@ const props = defineProps<{ learner: Learner }>()
 
 const BADGE: Record<string, string> = {
   active_schedule: 'bg-emerald-50 text-emerald-700',
+  waitlist: 'bg-amber-50 text-amber-700',
   schedule_pending: 'bg-slate-100 text-slate-600',
   schedule_changed: 'bg-amber-50 text-amber-700',
   coach_changed: 'bg-sky-50 text-sky-700',

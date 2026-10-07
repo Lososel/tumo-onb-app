@@ -3,22 +3,26 @@
 Reads every tab of the spreadsheet as a raw value grid and maps columns to our schema by
 header name, so column order and exact wording can change freely:
 
-  full_name      "ФИО", "ФИО ученика", "Full Name", "Имя Фамилия" ...   (required)
-  schedule       "Расписание", "График", "Schedule"
-  coach_name     "Коуч", "Coach"
-  room           "Кабинет", "Комната", "Room"
-  default_email  "Почта", "Email", "E-mail"
-  temp_password  "Пароль", "Временный пароль", "Password"
-  tumo_id        "TUMO ID", "ID"
-  status         "Статус", "Status"   (optional)
-  extra_info     every other column (kept server-side only, never sent to the public API)
+  full_name        "ФИО", "ФИО ребенка", "ФИО ученика", "Full Name" ...   (required)
+  schedule         "Расписание", "График", "Schedule"
+  coach_name       "Coach", "Коуч"            (active coach)
+  room             "Зона", "Кабинет", "Комната", "Room"
+  default_email    "Почта TUMO", "Почта", "Email", "E-mail"
+  temp_password    "Временный пароль", "Пароль", "Password"
+  tumo_id          "TUMO ID", "ID"
+  status           "Статус", "Status"   (optional)
+  prev_coach_name  "ex-Coach"           (optional; fallback when Coach is empty)
+  extra_info       every other column (kept server-side only, never sent to the public API)
 
 Header detection: the first of the top rows that names at least two known fields is the header
-(title rows above it are skipped). A tab with no recognizable header row falls back to
-positional mapping in the order above. Tabs without names (notes, pivots) are skipped.
+(title rows above it are skipped). An exact alias beats a partial one ("Coach" beats "ex-Coach"
+for coach_name); among equals the leftmost column wins. A tab with no recognizable header row
+falls back to positional mapping in the order above. Tabs without names are skipped.
 
-Privacy: columns that look like national IDs, phones, birth dates or addresses are dropped
-even from extra_info, as are 12-digit IIN-shaped values.
+Privacy: columns whose header looks like an IIN, phone, birth date, address, or a parent's or
+child's personal contact ("ФИО родителя", "почта ребенка", "номер ребенка") are ignored
+completely — never mapped to a field, never kept in extra_info. 12-digit IIN-shaped values are
+also dropped from extra_info.
 """
 
 from __future__ import annotations
@@ -39,21 +43,27 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "full_name": ("full name", "fullname", "name", "фио", "аты жөні", "имя фамилия", "учащийся", "ученик"),
     "schedule": ("schedule", "расписание", "график", "кесте"),
     "coach_name": ("coach", "coach name", "коуч", "куратор"),
-    "room": ("room", "кабинет", "комната", "аудитория", "бөлме"),
-    "default_email": ("email", "e mail", "mail", "почта", "электронная почта"),
+    "room": ("room", "кабинет", "комната", "аудитория", "бөлме", "зона", "zone"),
+    "default_email": (
+        "email", "e mail", "mail", "почта", "электронная почта",
+        "почта tumo", "tumo email", "tumo почта", "tumo mail",
+    ),
     "temp_password": ("password", "temp password", "пароль", "временный пароль", "құпия сөз"),
     "tumo_id": ("tumo id", "id", "tumo айди"),
     "status": ("status", "статус"),
+    "prev_coach_name": ("ex coach", "previous coach", "бывший коуч", "предыдущий коуч", "старый коуч"),
 }
-POSITIONAL_FIELDS = list(FIELD_ALIASES)[:7]  # status is never assumed positionally
+POSITIONAL_FIELDS = list(FIELD_ALIASES)[:7]  # status / prev coach are never assumed positionally
 
 HEADER_SCAN_ROWS = 5  # how many top rows may hold titles before the header row
 POSITIONAL_MIN_CELLS = 3  # header-less tabs: rows with fewer filled cells are notes/titles
 
 # Column headers whose data we refuse to keep anywhere (matched as substrings of the header).
 _SENSITIVE_HEADER = re.compile(
-    r"иин|iin|жсн|паспорт|passport|удостоверени|телефон|phone|тел\b|дата рождения|birth|"
-    r"туған|адрес|address|мекенжай|родител|parent",
+    r"иин|iin|жсн|паспорт|passport|удостоверени|телефон|phone|тел\b|мобильн|whatsapp|"
+    r"номер (?:ребен|ребён|родит|телеф)|дата рождения|день рождения|\bдр\b|birth|туған|"
+    r"адрес|address|мекенжай|родител|parent|"
+    r"почта (?:ребен|ребён)|email (?:ребен|ребён)|child email|personal email",
     re.IGNORECASE,
 )
 _IIN_VALUE = re.compile(r"^\d{12}$")
@@ -69,18 +79,24 @@ _STATUS_CODES = {
     "schedule_pending": ("pending", "в обработке", "уточняется", "заявка в обработке"),
     "schedule_changed": ("schedule changed", "график изменен", "расписание изменено"),
     "coach_changed": ("coach changed", "коуч изменен", "новый коуч"),
+    "waitlist": ("waitlist", "wait list", "лист ожидания", "в листе ожидания", "күту тізімі"),
     "active_schedule": ("active", "активный", "активный график", "активен"),
 }
+_WAITLIST_IN_SCHEDULE = re.compile(r"лист\w* ожидани|wait\s?list|күту тізім", re.IGNORECASE)
 
 
 # ---------- normalization ----------
 
 
 def clean_text(value: Any) -> str:
-    """Trim, collapse internal whitespace (incl. non-breaking spaces) and drop control chars."""
+    """Trim, collapse whitespace (incl. non-breaking spaces) and drop control chars.
+
+    Multi-line cells keep their line structure as ", ": "WR 5\\n3 этаж" -> "WR 5, 3 этаж".
+    """
     s = unicodedata.normalize("NFC", str(value if value is not None else ""))
-    s = "".join(ch for ch in s if unicodedata.category(ch)[0] != "C" or ch in "\t\n")
-    return " ".join(s.split())
+    s = "".join(ch for ch in s if unicodedata.category(ch)[0] != "C" or ch in "\t\n\r")
+    lines = (" ".join(line.split()) for line in s.splitlines())
+    return ", ".join(line for line in lines if line)
 
 
 def name_tokens(name: str) -> list[str]:
@@ -119,26 +135,37 @@ def _header_words(header: Any) -> str:
 # ---------- header detection ----------
 
 
-def match_header(header: Any) -> str | None:
-    """Map one header cell to a schema field, or None if unknown/ambiguous.
+EXACT, PARTIAL = 2, 1  # header match quality
 
-    Exact alias match wins. Otherwise an alias whose words all appear in the header counts
-    ("ФИО ученика" -> full_name), unless the header hits several fields ("Email коуча" hits
+
+def _match_header_scored(header: Any) -> tuple[str, int] | None:
+    """Map one header cell to (field, EXACT|PARTIAL), or None if unknown, ambiguous or sensitive.
+
+    Sensitive headers ("ФИО родителя", "почта ребенка", "ИИН ребенка") never map to a field.
+    An exact alias match wins. Otherwise an alias whose words all appear in the header counts
+    ("ФИО ребенка" -> full_name), unless the header hits several fields ("Email коуча" hits
     both default_email and coach_name) — ambiguous headers are treated as extra info.
     """
+    if _SENSITIVE_HEADER.search(clean_text(header)):
+        return None
     h = _header_words(header)
     if not h:
         return None
     for field, aliases in FIELD_ALIASES.items():
         if h in aliases:
-            return field
+            return field, EXACT
     words = h.split()
     hits = {
         field
         for field, aliases in FIELD_ALIASES.items()
         if any(all(_word_in(a, words) for a in alias.split()) for alias in aliases)
     }
-    return hits.pop() if len(hits) == 1 else None
+    return (hits.pop(), PARTIAL) if len(hits) == 1 else None
+
+
+def match_header(header: Any) -> str | None:
+    scored = _match_header_scored(header)
+    return scored[0] if scored else None
 
 
 def _word_in(alias_word: str, words: list[str]) -> bool:
@@ -153,15 +180,22 @@ def detect_columns(grid: Grid) -> tuple[int, dict[str, int], dict[int, str]]:
     Falls back to positional mapping (first_data_row = 0) when no header row is found.
     """
     for r, row in enumerate(grid[:HEADER_SCAN_ROWS]):
-        fields: dict[str, int] = {}
-        extras: dict[int, str] = {}
+        best: dict[str, tuple[int, int]] = {}  # field -> (quality, column)
+        candidates: dict[int, str] = {}  # every non-sensitive, non-empty header
         for c, cell in enumerate(row):
-            field = match_header(cell)
-            if field and field not in fields:
-                fields[field] = c
-            elif clean_text(cell):
-                extras[c] = clean_text(cell)
+            text = clean_text(cell)
+            if not text or _SENSITIVE_HEADER.search(text):
+                continue  # sensitive columns are dropped entirely, not even kept as extras
+            candidates[c] = text
+            scored = _match_header_scored(cell)
+            if scored:
+                field, quality = scored
+                if field not in best or quality > best[field][0]:  # leftmost wins among equals
+                    best[field] = (quality, c)
+        fields = {field: c for field, (_, c) in best.items()}
         if "full_name" in fields and len(fields) >= 2:
+            used = set(fields.values())
+            extras = {c: h for c, h in candidates.items() if c not in used}
             return r + 1, fields, extras
     return 0, {f: i for i, f in enumerate(POSITIONAL_FIELDS)}, {}
 
@@ -176,7 +210,10 @@ def _status_code(text: str, schedule: str) -> str:
             return code
     if text:
         return "other"
-    return "active_schedule" if schedule else "schedule_pending"
+    if not schedule:
+        return "schedule_pending"
+    # e.g. "Понедельник, Четверг : 10:30–12:30 (лист ожидания)"
+    return "waitlist" if _WAITLIST_IN_SCHEDULE.search(schedule) else "active_schedule"
 
 
 def _cell(row: list[Any], idx: int | None) -> str:
@@ -188,7 +225,7 @@ def parse_grid(tab: str, grid: Grid) -> list[LearnerRecord]:
     if "full_name" not in fields:
         return []
     positional = start == 0
-    safe_extras = {i: h for i, h in extras.items() if not _SENSITIVE_HEADER.search(h)}
+    safe_extras = extras  # detect_columns already excluded sensitive headers
 
     learners = []
     for row in grid[start:]:
@@ -214,7 +251,8 @@ def parse_grid(tab: str, grid: Grid) -> list[LearnerRecord]:
                 tokens=tokens,
                 full_name=full_name,
                 schedule=schedule,
-                coach_name=get("coach_name"),
+                coach_name=get("coach_name") or get("prev_coach_name"),
+                prev_coach_name=get("prev_coach_name"),
                 room=get("room"),
                 default_email=email if _EMAIL.match(email) else "",
                 temp_password=get("temp_password"),

@@ -15,7 +15,8 @@ class LearnerRecord(BaseModel):
     tokens: list[str]  # normalized name tokens used for matching
     full_name: str
     schedule: str = ""
-    coach_name: str = ""
+    coach_name: str = ""  # active coach ("Coach"), falling back to "ex-Coach" when empty
+    prev_coach_name: str = ""  # internal only ("ex-Coach")
     room: str = ""
     default_email: str = ""
     temp_password: str = ""  # returned only when EXPOSE_TEMP_PASSWORD is enabled

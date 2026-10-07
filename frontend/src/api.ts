@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-export type StatusCode = 'active_schedule' | 'schedule_pending' | 'schedule_changed' | 'coach_changed'
+export type StatusCode = 'active_schedule' | 'waitlist' | 'schedule_pending' | 'schedule_changed' | 'coach_changed'
 
 /** One learner's schedule card, as returned by POST /api/schedule/lookup. */
 export interface Learner {

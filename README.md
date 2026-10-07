@@ -68,23 +68,29 @@ Every tab is read, so you can keep one tab per batch or group. Columns are match
 
 | Field | Header examples | On the card? |
 |---|---|---|
-| Full name (**required**) | `ФИО`, `ФИО ученика`, `Full Name` | yes |
+| Full name (**required**) | `ФИО ребенка`, `ФИО`, `ФИО ученика`, `Full Name` | yes |
 | Schedule | `Расписание`, `График`, `Schedule` | yes |
-| Coach | `Коуч`, `Coach` | yes |
-| Room | `Кабинет`, `Комната`, `Room` | yes |
-| Email | `Почта`, `Email` | yes |
+| Coach | `Coach`, `Коуч` (falls back to `ex-Coach` when empty) | yes |
+| Room | `Зона`, `Кабинет`, `Комната`, `Room` | yes |
+| Email | `Почта TUMO`, `Почта`, `Email` | yes |
 | Temporary password | `Пароль`, `Временный пароль`, `Password` | only if `EXPOSE_TEMP_PASSWORD=true` |
 | TUMO ID | `TUMO ID`, `ID` | never (used to spot the same learner in two tabs) |
 | Status | `Статус`, `Status` (optional) | as the badge |
 
 - **Header row:** title rows above the headers are fine; the parser looks for the header row in the top 5 rows. A tab with no header row is read in the order of the table above, and rows with fewer than 3 filled cells (notes, titles) are skipped. Tabs with no names, such as notes, are ignored.
+- **Multi-line cells** are joined with ", ", so a `Зона` of "WR 5" + new line + "3 этаж" shows as "WR 5, 3 этаж".
+- **Batch export layout** ("Batch №N - Распределение между коучами"): two capacity rows, then the header at row 3. The parent and child personal columns (ФИО/ИИН/почта/номер родителя, почта/номер/ИИН/ДР ребенка) are ignored completely, as are columns with an empty header. Supported as-is.
 - **Badge:**
-  - With no `Статус` column, the badge shows **"Активный график"** when a schedule is filled in and **"График уточняется"** when it isn't.
+  - With no `Статус` column, the badge shows **"Активный график"** when a schedule is filled in and **"График уточняется"** when it isn't. A schedule containing "(лист ожидания)" shows **"Лист ожидания"**.
   - Recognised status values: `График изменен`, `Коуч изменен`, `В обработке`, `Неактивен`.
   - `Неактивен` hides the learner's card. Any other status text is shown as typed.
 - **Ambiguous headers:** a header that mentions two fields, such as "Email коуча", isn't treated as the learner's email. It's kept server-side only.
 - **Kazakh mode:** weekday names in the schedule are translated automatically (Вторник → Сейсенбі).
 - **Columns never kept:** columns whose header looks like an IIN (ИИН/ЖСН), phone, birth date, address or parent details are dropped. So are 12-digit IIN-shaped values in other columns. Even so, **don't put IINs in the sheet**.
+
+### Serving CSV exports instead
+
+Export each tab with *File → Download → CSV* and put the files in `backend/data/csv/`, which is git-ignored. Then set `DATA_SOURCE=csv` (and optionally `CSV_PATH`, which can be a single file or a folder). Each file counts as one tab, named after the file. **These exports contain IINs and phone numbers: never commit them.** The parser drops those columns, but the files themselves are still sensitive.
 
 ### Connecting the real sheet
 

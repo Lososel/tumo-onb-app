@@ -1,11 +1,13 @@
 """Data sources. Each returns every tab as a raw value grid; parsing happens in services.sheets.
 
 - MockJsonSource:     reads data/mock_sheet.json — works out of the box, no credentials.
+- CsvSource:          reads exported tabs as .csv files (DATA_SOURCE=csv, CSV_PATH).
 - GoogleSheetsSource: reads the live Google Sheet with a service account (credentials.json).
 """
 
 from __future__ import annotations
 
+import csv
 import json
 from pathlib import Path
 from typing import Protocol
@@ -34,6 +36,29 @@ class MockJsonSource:
         if not isinstance(data, dict):
             raise ValueError("mock sheet must be an object of {tab title: [[row], ...]}")
         return {str(tab): list(grid) for tab, grid in data.items()}
+
+
+class CsvSource:
+    """Reads exported sheet tabs as CSV files: one file = one tab (titled by the file name).
+
+    `path` may be a single .csv file or a folder of them. Real exports contain personal data;
+    keep them out of git (backend/data/csv/ is ignored).
+    """
+
+    name = "csv"
+
+    def __init__(self, path: Path):
+        self.path = path
+
+    def fetch(self) -> RawTabs:
+        files = sorted(self.path.glob("*.csv")) if self.path.is_dir() else [self.path]
+        if not files:
+            raise FileNotFoundError(f"no .csv files in {self.path}")
+        out: RawTabs = {}
+        for file in files:
+            with file.open(encoding="utf-8-sig", newline="") as f:  # utf-8-sig: Excel/Sheets BOM
+                out[file.stem] = list(csv.reader(f))
+        return out
 
 
 class GoogleSheetsSource:
@@ -84,4 +109,6 @@ class GoogleSheetsSource:
 def build_source(settings: Settings) -> DataSource:
     if settings.data_source == "google":
         return GoogleSheetsSource(settings.google_credentials_file, settings.google_sheet_id)
+    if settings.data_source == "csv":
+        return CsvSource(settings.csv_path)
     return MockJsonSource(settings.mock_file)

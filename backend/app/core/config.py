@@ -34,6 +34,7 @@ class Settings:
     google_credentials_file: Path = field(default_factory=lambda: BACKEND_DIR / "credentials.json")
     google_sheet_id: str = ""
     mock_file: Path = field(default_factory=lambda: BACKEND_DIR / "data" / "mock_sheet.json")
+    csv_path: Path = field(default_factory=lambda: BACKEND_DIR / "data" / "csv")  # file or folder
     cache_file: Path = field(default_factory=lambda: BACKEND_DIR / "data" / "cache" / "snapshot.json")
     sync_interval_seconds: int = 300
     cors_origins: tuple[str, ...] = ("http://localhost:5173",)
@@ -53,6 +54,7 @@ class Settings:
             google_credentials_file=_resolve(env("GOOGLE_CREDENTIALS_FILE", "credentials.json")),
             google_sheet_id=env("GOOGLE_SHEET_ID", "").strip(),
             mock_file=_resolve(env("MOCK_FILE", "data/mock_sheet.json")),
+            csv_path=_resolve(env("CSV_PATH", "data/csv")),
             cache_file=_resolve(env("CACHE_FILE", "data/cache/snapshot.json")),
             sync_interval_seconds=max(30, int(env("SYNC_INTERVAL_SECONDS", "300"))),
             cors_origins=tuple(

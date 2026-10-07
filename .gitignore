@@ -20,3 +20,7 @@ dist/
 
 # Personal Claude Code settings
 .claude/settings.local.json
+
+# Real sheet exports contain personal data (IINs, phones) - never commit them
+backend/data/csv/
+backend/data/*.csv

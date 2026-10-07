@@ -41,6 +41,7 @@ const kk: Messages = {
 
   status: {
     active_schedule: 'Белсенді кесте',
+    waitlist: 'Күту тізімі',
     schedule_pending: 'Кесте нақтылануда',
     schedule_changed: 'Кесте өзгерді',
     coach_changed: 'Коуч өзгерді',
@@ -48,6 +49,7 @@ const kk: Messages = {
 
   statusNote: {
     active_schedule: '',
+    waitlist: 'Оқушы осы уақытқа күту тізімінде тұр. Орын босағанда бірден хабарлаймыз.',
     schedule_pending: 'Кесте әлі жасалуда. Кейінірек тексеріңіз немесе бізге хабарласыңыз.',
     schedule_changed: 'Оқу кестесі өзгерді. Жоғарыда көрсетілген жаңа кестені басшылыққа алыңыз.',
     coach_changed: 'Оқушыға жаңа коуч тағайындалды. Оның аты жоғарыда көрсетілген.',
