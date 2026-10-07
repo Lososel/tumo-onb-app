@@ -44,6 +44,11 @@ class LearnerStore:
         self.serving_fallback = False
         self._task: asyncio.Task | None = None
 
+    @property
+    def origin(self) -> str:
+        """What a snapshot must have been built from to be served (file id/path + tab filter)."""
+        return f"{getattr(self.source, 'origin', self.source.name)}|{self.tab_filter}"
+
     # ---------- reads ----------
 
     @property
@@ -64,9 +69,18 @@ class LearnerStore:
             self._snapshot = snapshot
 
     def load_from_disk(self) -> bool:
+        """Load the last good snapshot — only if it came from the currently configured source.
+
+        A cache from another sheet (e.g. after GOOGLE_SHEET_ID or TAB_FILTER changed) is
+        discarded so stale data from the old sheet is never served.
+        """
         try:
-            data = json.loads(self.cache_file.read_text(encoding="utf-8"))
-            self._install(Snapshot.model_validate(data))
+            snapshot = Snapshot.model_validate(json.loads(self.cache_file.read_text(encoding="utf-8")))
+            if snapshot.origin != self.origin:
+                log.warning("Discarding cache built from a different source/tab filter")
+                self.cache_file.unlink(missing_ok=True)
+                return False
+            self._install(snapshot)
             log.info("Loaded cached snapshot from %s", self.cache_file)
             return True
         except FileNotFoundError:
@@ -95,6 +109,7 @@ class LearnerStore:
         self.last_sync_attempt = datetime.now(timezone.utc)
         try:
             snapshot = parse_tabs(self.source.fetch(), source=self.source.name, tab_filter=self.tab_filter)
+            snapshot.origin = self.origin
         except Exception as exc:
             # Config errors carry a safe, actionable message; for anything else keep only the
             # type, since messages can contain URLs/IDs we don't want on a public endpoint.
@@ -145,13 +160,17 @@ class LearnerStore:
             await asyncio.sleep(self.sync_interval)
 
     async def start(self, initial_timeout: float = 10.0) -> None:
-        """Serve the disk cache immediately if present; otherwise wait (bounded) for a first sync.
+        """Sync immediately on startup so sheet edits are visible right after a (re)deploy.
 
-        Never raises, so a Google outage or misconfiguration can't stop the app from starting.
+        A matching disk cache is served while that first sync runs in the background; with no
+        usable cache, startup waits (bounded) for it. Never raises, so a Google outage or
+        misconfiguration can't stop the app from starting.
         """
         synced = False
         try:
-            if not self.load_from_disk():
+            if self.load_from_disk():
+                pass  # serve the cache now; the loop below syncs immediately (skip_first=False)
+            else:
                 synced = await asyncio.wait_for(self.refresh_async(), timeout=initial_timeout)
         except asyncio.TimeoutError:
             log.warning("Initial sync timed out; continuing in the background")

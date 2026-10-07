@@ -101,6 +101,41 @@ def load_credentials_file(path) -> dict:
         message = str(exc).replace("GOOGLE_CREDENTIALS_JSON", f"credentials file {path}")
         raise SheetsConfigError(message) from None
 
+# ---------- .xlsx files stored in Google Drive ----------
+
+
+def _xlsx_cell(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))  # 1748.0 -> "1748" (numeric passwords, room numbers)
+    if isinstance(value, datetime):
+        return value.strftime("%d.%m.%Y %H:%M" if (value.hour or value.minute) else "%d.%m.%Y")
+    return str(value)
+
+
+def xlsx_to_tabs(data: bytes, tab_filter: str = "") -> RawTabs:
+    """Read an .xlsx workbook into {tab title: grid}, applying TAB_FILTER before reading rows.
+
+    Uses the cached cell values (what you see in the sheet), not formulas.
+    """
+    from io import BytesIO
+
+    from openpyxl import load_workbook  # lazy: only needed for Drive .xlsx sources
+
+    try:
+        wb = load_workbook(BytesIO(data), read_only=True, data_only=True)
+    except Exception as exc:
+        raise SheetsConfigError(f"file is not a readable .xlsx workbook ({type(exc).__name__})") from None
+    try:
+        out: RawTabs = {}
+        for title in select_tabs(wb.sheetnames, tab_filter):
+            out[title] = [[_xlsx_cell(v) for v in row] for row in wb[title].iter_rows(values_only=True)]
+        return out
+    finally:
+        wb.close()
+
+
 # A grid is the tab's cell values, top row first. RawTabs maps tab title -> grid.
 Grid = list[list[Any]]
 RawTabs = dict[str, Grid]
@@ -122,7 +157,7 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
 }
 POSITIONAL_FIELDS = list(FIELD_ALIASES)[:7]  # status / prev coach are never assumed positionally
 
-HEADER_SCAN_ROWS = 5  # how many top rows may hold titles before the header row
+HEADER_SCAN_ROWS = 15  # how many top rows may hold titles/notes before the header row
 POSITIONAL_MIN_CELLS = 3  # header-less tabs: rows with fewer filled cells are notes/titles
 
 # Column headers whose data we refuse to keep anywhere (matched as substrings of the header).
@@ -270,13 +305,20 @@ def detect_columns(grid: Grid) -> tuple[int, dict[str, int], dict[int, str]]:
 # ---------- row parsing ----------
 
 
-def _status_code(text: str, schedule: str) -> str:
+def is_waitlist_tab(title: str) -> bool:
+    """Tabs like "4 поток (лист ожидания)" hold waitlisted learners."""
+    return bool(_WAITLIST_IN_SCHEDULE.search(title))
+
+
+def _status_code(text: str, schedule: str, waitlist_tab: bool = False) -> str:
     v = _header_words(text)
     for code, labels in _STATUS_CODES.items():
         if v in labels:
             return code
     if text:
         return "other"
+    if waitlist_tab:
+        return "waitlist"
     if not schedule:
         return "schedule_pending"
     # e.g. "Понедельник, Четверг : 10:30–12:30 (лист ожидания)"
@@ -292,6 +334,7 @@ def parse_grid(tab: str, grid: Grid) -> list[LearnerRecord]:
     if "full_name" not in fields:
         return []
     positional = start == 0
+    waitlist_tab = is_waitlist_tab(tab)
     safe_extras = extras  # detect_columns already excluded sensitive headers
 
     learners = []
@@ -325,7 +368,7 @@ def parse_grid(tab: str, grid: Grid) -> list[LearnerRecord]:
                 temp_password=get("temp_password"),
                 tumo_id=get("tumo_id"),
                 status=status,
-                status_code=_status_code(status, schedule),
+                status_code=_status_code(status, schedule, waitlist_tab),
                 extra_info=extra,
                 tab=tab,
             )
@@ -369,7 +412,9 @@ def parse_tabs(raw: RawTabs, source: str, tab_filter: str = "") -> Snapshot:
     learners: list[LearnerRecord] = []
     by_id: dict[str, LearnerRecord] = {}
     by_name: dict[str, LearnerRecord] = {}
-    for tab in select_tabs(list(raw), tab_filter):
+    # Main tabs before waitlist tabs: a learner listed in both shows their main-tab row.
+    tabs = sorted(select_tabs(list(raw), tab_filter), key=is_waitlist_tab)
+    for tab in tabs:
         for rec in parse_grid(tab, raw[tab]):
             id_key = normalize_tumo_id(rec.tumo_id)
             name_key = " ".join(sorted(rec.tokens))
@@ -379,7 +424,7 @@ def parse_tabs(raw: RawTabs, source: str, tab_filter: str = "") -> Snapshot:
                     if not getattr(first, f) and getattr(rec, f):
                         setattr(first, f, getattr(rec, f))
                 if first.status_code == "schedule_pending" and first.schedule:
-                    first.status_code = _status_code(first.status, first.schedule)
+                    first.status_code = _status_code(first.status, first.schedule, is_waitlist_tab(first.tab))
                 if id_key:
                     by_id.setdefault(id_key, first)
                 continue

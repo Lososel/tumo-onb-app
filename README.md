@@ -84,7 +84,7 @@ Every tab is read, so you can keep one tab per batch or group. Columns are match
   - With no `Статус` column, the badge shows **"Активный график"** when a schedule is filled in and **"График уточняется"** when it isn't. A schedule containing "(лист ожидания)" shows **"Лист ожидания"**.
   - Recognised status values: `График изменен`, `Коуч изменен`, `В обработке`, `Неактивен`.
   - `Неактивен` hides the learner's card. Any other status text is shown as typed.
-- **Tab targeting:** set `TAB_FILTER` (for example `4 поток`, the default in `render.yaml`) to search only tabs whose name contains that text, ignoring case and spacing. Other tabs aren't even downloaded. If no tab matches, all tabs are searched and a warning is logged.
+- **Tab discovery:** every tab is read, and any tab with a student header row (`ФИО ребенка`, `ФИО` or `Full Name`, within its top 15 rows) is parsed. Learners in a tab named like "4 поток (лист ожидания)" get the "Лист ожидания" badge; if a student is in both the main tab and the waitlist tab, the main tab wins. Set `TAB_FILTER` (for example `4 поток`) to search only tabs whose name contains that text, ignoring case and spacing. Other tabs aren't even downloaded. If no tab matches, all tabs are searched and a warning is logged.
 - **Columns not added yet:** the room (`Зона` / `learning_zone`), email (`Почта TUMO` / `default_email`) and password (`temp_password`) columns can be missing. Room and email then show "Уточняется" and the password stays hidden. Add the columns whenever they're ready; no code change is needed.
 - **Each student appears once:** duplicates are matched by TUMO ID or full name (ignoring order, case, spacing and Kazakh letters). The first row wins, and its empty fields are filled from later duplicates. Two different children with the same full name would also be merged into one card.
 - **Ambiguous headers:** a header that mentions two fields, such as "Email коуча", isn't treated as the learner's email. It's kept server-side only.
@@ -97,13 +97,19 @@ Export each tab with *File → Download → CSV* and put the files in `backend/d
 
 ### Connecting the real sheet
 
-1. In Google Cloud, create a project, enable the **Google Sheets API**, and create a **service account**. Download its JSON key and save it as `backend/credentials.json`. This file is git-ignored; never commit it.
-2. Share the spreadsheet with the service account's email address (`…@….iam.gserviceaccount.com`). **Viewer** access is enough.
+1. In Google Cloud, create a project, enable the **Google Sheets API** and the **Google Drive API**, and create a **service account**. Download its JSON key and save it as `backend/credentials.json` (git-ignored; never commit it), or put the JSON in `GOOGLE_CREDENTIALS_JSON`.
+2. Share the file with the service account's email address (`…@….iam.gserviceaccount.com`). **Viewer** access is enough.
 3. Copy `backend/.env.example` to `backend/.env` and set:
    ```
    DATA_SOURCE=google
-   GOOGLE_SHEET_ID=<the long id from the sheet URL>
+   GOOGLE_SHEET_ID=<the file id from its URL>
    ```
+
+`GOOGLE_SHEET_ID` can point to either kind of file, and the backend detects which through the Drive API:
+- **A native Google Sheet** (`docs.google.com/spreadsheets/d/<id>`) is read with the Sheets API.
+- **An `.xlsx` file stored in Drive** (`drive.google.com/file/d/<id>`, edited in Office-compatibility mode) is downloaded and parsed directly, because the Sheets API can't read those. The live workbook is one of these, which is why the **Drive API must be enabled**.
+
+**On startup** the app syncs immediately, so sheet edits are visible right after a deploy or restart. A cached snapshot from a *different* file or `TAB_FILTER` is discarded instead of being served.
 
 ## How it keeps running
 

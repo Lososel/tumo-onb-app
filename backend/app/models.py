@@ -35,3 +35,4 @@ class Snapshot(BaseModel):
     learners: list[LearnerRecord] = Field(default_factory=list)
     fetched_at: datetime
     source: str
+    origin: str = ""  # source origin + tab filter; a cache from a different origin is ignored

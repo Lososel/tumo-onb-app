@@ -9,8 +9,8 @@ from fastapi.testclient import TestClient
 
 from app.core.config import BACKEND_DIR, Settings
 from app.main import create_app
-from app.services.sheets import SheetsConfigError, load_credentials_file, parse_credentials_json
-from app.sources import GoogleSheetsSource
+from app.services.sheets import SheetsConfigError, load_credentials_file, parse_credentials_json, parse_tabs
+from app.sources import GoogleSheetsSource, MockJsonSource
 
 FAKE_KEY_BODY = "MIIEvQIBADANBgkqhkiG9w0BAQEFAASC-fake-key-material"
 SERVICE_ACCOUNT = {
@@ -137,10 +137,16 @@ def test_auth_error_during_sync_keeps_app_up(make_client, fake_gspread):
         assert lookup(c).status_code == 200
 
 
+def seed_cache(cache, origin):
+    """A cache as left behind by an earlier successful sync from `origin`."""
+    snap = parse_tabs(MockJsonSource(BACKEND_DIR / "data" / "mock_sheet.json").fetch(), source="google")
+    snap.origin = origin
+    cache.write_text(snap.model_dump_json(), encoding="utf-8")
+
+
 def test_auth_error_falls_back_to_cached_snapshot(make_client, fake_gspread, tmp_path):
     cache = tmp_path / "snapshot.json"
-    with make_client(cache_file=cache):  # a healthy mock run writes the cache
-        pass
+    seed_cache(cache, "google:sheet123|")  # Google worked earlier, then started failing
     creds = json.dumps(SERVICE_ACCOUNT)
     with make_client(data_source="google", google_sheet_id="sheet123", google_credentials_json=creds,
                      cache_file=cache) as c:

@@ -20,6 +20,7 @@ from .services.sheets import (
     load_credentials_file,
     parse_credentials_json,
     select_tabs,
+    xlsx_to_tabs,
 )
 
 log = logging.getLogger(__name__)
@@ -27,6 +28,7 @@ log = logging.getLogger(__name__)
 
 class DataSource(Protocol):
     name: str
+    origin: str  # which data this is (e.g. "google:<file id>"); tags cached snapshots
 
     def fetch(self) -> RawTabs: ...
 
@@ -38,6 +40,10 @@ class MockJsonSource:
 
     def __init__(self, path: Path):
         self.path = path
+
+    @property
+    def origin(self) -> str:
+        return f"mock:{self.path}"
 
     def fetch(self) -> RawTabs:
         with self.path.open(encoding="utf-8") as f:
@@ -59,6 +65,10 @@ class CsvSource:
     def __init__(self, path: Path):
         self.path = path
 
+    @property
+    def origin(self) -> str:
+        return f"csv:{self.path}"
+
     def fetch(self) -> RawTabs:
         files = sorted(self.path.glob("*.csv")) if self.path.is_dir() else [self.path]
         if not files:
@@ -71,18 +81,30 @@ class CsvSource:
 
 
 class GoogleSheetsSource:
-    """Reads every tab: one metadata call lists the tabs, one batched call reads them all.
+    """Reads a spreadsheet from Google: a native Google Sheet *or* an .xlsx file stored in Drive.
 
-    Setup: create a service account in Google Cloud, enable the Sheets API, and share the
-    spreadsheet with the service account's email (Viewer access is enough). Provide the key
-    either as GOOGLE_CREDENTIALS_JSON (raw JSON) or as a file (GOOGLE_CREDENTIALS_FILE).
+    GOOGLE_SHEET_ID may be either kind of file id; the type is detected through the Drive API:
+      - Google Sheet: one metadata call lists the tabs, one batched values call reads them.
+      - .xlsx in Drive (e.g. edited in Office-compatibility mode): the file is downloaded and
+        parsed locally — the Sheets API cannot read these.
+    If the Drive API isn't enabled for the project, native Sheets still work (Sheets path).
 
-    Construction never fails: a missing sheet id or bad credentials surface as a
-    SheetsConfigError on fetch(), which the store treats like any other sync failure.
+    Setup: create a service account in Google Cloud, enable the Google Sheets API and the
+    Google Drive API, and share the file with the service account's email (Viewer is enough).
+    Provide the key as GOOGLE_CREDENTIALS_JSON (raw JSON) or GOOGLE_CREDENTIALS_FILE.
+
+    Construction never fails: a missing id or bad credentials surface as a SheetsConfigError
+    on fetch(), which the store treats like any other sync failure.
     """
 
     name = "google"
-    SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+    SCOPES = [
+        "https://www.googleapis.com/auth/spreadsheets.readonly",
+        "https://www.googleapis.com/auth/drive.readonly",
+    ]
+    DRIVE_FILES = "https://www.googleapis.com/drive/v3/files/"
+    SHEET_MIME = "application/vnd.google-apps.spreadsheet"
+    XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
     def __init__(
         self, credentials_file: Path, sheet_id: str, tab_filter: str = "", credentials_json: str = ""
@@ -91,15 +113,20 @@ class GoogleSheetsSource:
         self.credentials_json = credentials_json
         self.sheet_id = sheet_id
         self.tab_filter = tab_filter
-        self._spreadsheet = None
+        self._client = None
+
+    @property
+    def origin(self) -> str:
+        """Identifies the data behind a cached snapshot; a different file invalidates the cache."""
+        return f"google:{self.sheet_id}"
 
     def _credentials(self) -> dict:
         if self.credentials_json.strip():
             return parse_credentials_json(self.credentials_json)
         return load_credentials_file(self.credentials_file)
 
-    def _open(self):
-        if self._spreadsheet is None:
+    def _get_client(self):
+        if self._client is None:
             if not self.sheet_id:
                 raise SheetsConfigError("GOOGLE_SHEET_ID is not set")
             info = self._credentials()
@@ -109,26 +136,53 @@ class GoogleSheetsSource:
                 client = gspread.service_account_from_dict(info, scopes=self.SCOPES)
             except (ValueError, KeyError) as exc:  # e.g. a malformed private key
                 raise SheetsConfigError(f"service-account key rejected ({type(exc).__name__})") from None
-            client.set_timeout(15)
-            self._spreadsheet = client.open_by_key(self.sheet_id)
-        return self._spreadsheet
+            client.set_timeout(30)
+            self._client = client
+        return self._client
 
-    def fetch(self) -> RawTabs:
+    def _mime_type(self, client) -> str | None:
+        """File type via the Drive API, or None if Drive isn't available (then assume a Sheet)."""
         try:
-            spreadsheet = self._open()
-            # Picks up newly added tabs; with TAB_FILTER only the matching tabs are downloaded,
-            # so other batches' data never reaches this server.
-            titles = select_tabs([ws.title for ws in spreadsheet.worksheets()], self.tab_filter)
-            # Quote titles so names with spaces or punctuation are valid A1 ranges.
-            ranges = ["'" + t.replace("'", "''") + "'" for t in titles]
-            result = spreadsheet.values_batch_get(ranges) if ranges else {}
-        except Exception:
-            self._spreadsheet = None  # force a fresh connection next time
-            raise
+            resp = client.http_client.request(
+                "get", self.DRIVE_FILES + self.sheet_id,
+                params={"fields": "mimeType", "supportsAllDrives": "true"},
+            )
+            return resp.json().get("mimeType")
+        except Exception as exc:  # Drive API disabled / not shared: fall back to the Sheets path
+            log.info("Drive metadata unavailable (%s); treating the id as a Google Sheet", type(exc).__name__)
+            return None
+
+    def _fetch_sheet(self, client) -> RawTabs:
+        spreadsheet = client.open_by_key(self.sheet_id)
+        # Picks up newly added tabs; with TAB_FILTER only the matching tabs are downloaded,
+        # so other batches' data never reaches this server.
+        titles = select_tabs([ws.title for ws in spreadsheet.worksheets()], self.tab_filter)
+        # Quote titles so names with spaces or punctuation are valid A1 ranges.
+        ranges = ["'" + t.replace("'", "''") + "'" for t in titles]
+        result = spreadsheet.values_batch_get(ranges) if ranges else {}
         return {
             title: value_range.get("values", [])
             for title, value_range in zip(titles, result.get("valueRanges", []))
         }
+
+    def _fetch_xlsx(self, client) -> RawTabs:
+        resp = client.http_client.request(
+            "get", self.DRIVE_FILES + self.sheet_id, params={"alt": "media", "supportsAllDrives": "true"}
+        )
+        return xlsx_to_tabs(resp.content, self.tab_filter)
+
+    def fetch(self) -> RawTabs:
+        try:
+            client = self._get_client()
+            mime = self._mime_type(client)
+            if mime == self.XLSX_MIME:
+                return self._fetch_xlsx(client)
+            if mime in (None, self.SHEET_MIME):
+                return self._fetch_sheet(client)
+            raise SheetsConfigError(f"GOOGLE_SHEET_ID points to an unsupported file type ({mime})")
+        except Exception:
+            self._client = None  # force fresh credentials/connection next time
+            raise
 
 
 def build_source(settings: Settings) -> DataSource:

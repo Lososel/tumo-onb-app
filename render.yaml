@@ -4,10 +4,11 @@
 # the FastAPI backend from a single uvicorn process.
 #
 # After creating the Blueprint in the Render dashboard:
-#   1. Enter GOOGLE_SHEET_ID when prompted (the long id in the sheet's URL).
+#   1. In Google Cloud (project of the service account): enable the Google Sheets API AND the
+#      Google Drive API. Share the file with the service account's email (Viewer is enough).
 #   2. Service → Environment → Secret Files: add `credentials.json` with the Google service
-#      account key. Render mounts it at /etc/secrets/credentials.json. Share the sheet with the
-#      service account's email (Viewer is enough).
+#      account key (Render mounts it at /etc/secrets/credentials.json), or paste the JSON
+#      into GOOGLE_CREDENTIALS_JSON.
 #   3. Optional: copy the generated ADMIN_TOKEN to force a re-sync after editing the sheet:
 #        curl -X POST -H "X-Admin-Token: <token>" https://<service>.onrender.com/api/admin/refresh
 
@@ -26,8 +27,12 @@ services:
     envVars:
       - key: DATA_SOURCE
         value: google
+      # Live workbook "MAIN_ОБЩИЙ_1,2,3 БАТЧ_ВСЕХ_УЧЕНИКОВ_SL" — an .xlsx stored in Google Drive
+      # (native Google Sheet ids work too; the type is auto-detected). Not public: readable only
+      # by accounts it is shared with, including the service account. Requires the Google Drive
+      # API to be enabled in the service account's Cloud project.
       - key: GOOGLE_SHEET_ID
-        sync: false # prompted in the dashboard when the Blueprint is created
+        value: 1qcmLsXYRvu6Pf0ghM17V0dvq3sUuBDqm
       - key: GOOGLE_CREDENTIALS_FILE
         value: /etc/secrets/credentials.json # Render secret file (see step 2 above)
       # Alternative to the secret file: paste the whole service-account JSON here. Takes
@@ -39,10 +44,9 @@ services:
       # fake data makes every real search say "not found".
       - key: FALLBACK_TO_MOCK
         value: "false"
-      # Onboarding: only the tab whose name contains this text is read (case-insensitive).
-      # Other tabs are never downloaded. Clear it to search every tab.
-      - key: TAB_FILTER
-        value: 4 поток
+      # All tabs are discovered automatically: any tab with a student header row (ФИО ребенка /
+      # ФИО / Full Name) is parsed, others (summaries, notes) are skipped. To restrict, add
+      # TAB_FILTER (e.g. "4 поток" matches "4 поток" and "4 поток (лист ожидания)").
       - key: SYNC_INTERVAL_SECONDS
         value: "300"
       - key: LOOKUP_RATE_LIMIT_PER_MINUTE
