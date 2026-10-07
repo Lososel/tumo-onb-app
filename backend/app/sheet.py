@@ -64,7 +64,9 @@ _STAGE_CODES = {
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 # Kazakh-specific letters folded to their closest Russian letter, so "нуртас" matches "Нұртас".
-_KK_FOLD = str.maketrans({"ә": "а", "ғ": "г", "қ": "к", "ң": "н", "ө": "о", "ұ": "у", "ү": "у", "һ": "х", "і": "и"})
+_KK_FOLD = str.maketrans(
+    {"ә": "а", "ғ": "г", "қ": "к", "ң": "н", "ө": "о", "ұ": "у", "ү": "у", "һ": "х", "і": "и"}
+)
 
 
 def _header_key(h: str) -> str:
