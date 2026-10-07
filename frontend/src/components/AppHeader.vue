@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { locale, setLocale, t, type Locale } from '../i18n'
+import ChecklistIcon from './ChecklistIcon.vue'
 
 const locales: Locale[] = ['ru', 'kk']
 </script>
@@ -19,7 +20,7 @@ const locales: Locale[] = ['ru', 'kk']
           class="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-sm font-bold text-white transition hover:bg-white/10 sm:px-3"
           :aria-label="t.checklist.nav"
         >
-          <span aria-hidden="true">📋</span>
+          <ChecklistIcon name="clipboard" class="size-5" />
           <span class="hidden sm:inline">{{ t.checklist.nav }}</span>
         </a>
         <div
