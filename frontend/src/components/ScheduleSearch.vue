@@ -41,6 +41,8 @@ const message = computed(() => {
       return t.value.search.needFullName
     case 'too_many':
       return t.value.search.tooMany
+    case 'unavailable':
+      return t.value.search.unavailable
     default:
       return null
   }

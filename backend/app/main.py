@@ -15,7 +15,7 @@ from .api.endpoints import schedule
 from .core.config import Settings
 from .core.rate_limit import RateLimiter
 from .schemas.schedule import HealthResponse
-from .sources import build_source
+from .sources import build_fallback_source, build_source
 from .store import LearnerStore
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -23,8 +23,14 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
+    # Neither call raises: Google misconfiguration or outages surface as sync errors in
+    # /api/health while the app keeps serving its cache (or the opt-in mock fallback).
     store = LearnerStore(
-        build_source(settings), settings.cache_file, settings.sync_interval_seconds, settings.tab_filter
+        build_source(settings),
+        settings.cache_file,
+        settings.sync_interval_seconds,
+        settings.tab_filter,
+        fallback_source=build_fallback_source(settings),
     )
 
     @asynccontextmanager
@@ -50,13 +56,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         snap = store.snapshot
         if snap is None:
             status = "no_data"
-        elif store.last_sync_error:
-            status = "degraded"  # serving cached data while the source is failing
+        elif store.last_sync_error or store.serving_fallback:
+            status = "degraded"  # serving cached (or fallback) data while the source is failing
         else:
             status = "ok"
         return HealthResponse(
             status=status,
-            source=store.source.name,
+            source=snap.source if store.serving_fallback and snap else store.source.name,
             learners_cached=len(snap.learners) if snap else 0,
             data_updated_at=snap.fetched_at if snap else None,
             last_sync_error=store.last_sync_error,

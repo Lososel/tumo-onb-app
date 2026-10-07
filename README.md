@@ -142,6 +142,14 @@ Notes:
 - **`PROXY_HOPS=1`** makes rate limiting use the client IP that Render's proxy appends to `X-Forwarded-For`. Without it, every visitor would share one limit. After the first deploy, check that one visitor hitting the limit doesn't block others.
 - **`EXPOSE_TEMP_PASSWORD` is `false`.** Change it in the Environment tab for onboarding week only.
 
+**Credentials:** instead of the secret file, you can paste the whole service-account JSON into `GOOGLE_CREDENTIALS_JSON`; it takes priority when set. Escaped `\n` in the private key and line breaks pasted inside the JSON are both handled.
+
+**If the sheet can't be read**, for example a wrong sheet ID, bad credentials, or the sheet not shared with the service account:
+- **The app still starts.** It serves the last cached snapshot.
+- **With no cache yet,** lookups answer HTTP 200 with `"status": "unavailable"`, and the page says the schedule is being updated.
+- **`GET /api/health` shows the cause in `last_sync_error`,** for example `GOOGLE_SHEET_ID is not set`, `credentials file not found: …`, or `GOOGLE_CREDENTIALS_JSON is not valid JSON (line 1, column 44)`.
+- **Demo or staging only:** set `FALLBACK_TO_MOCK=true` to serve the sample data instead. Don't use it in production, because fake data makes every real search say "not found". It's never written to the cache.
+
 ### Any Docker host
 
 The simplest option is one container, which serves both the API and the built frontend. It listens on `$PORT` (default 8000):

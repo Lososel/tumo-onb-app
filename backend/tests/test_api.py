@@ -143,9 +143,11 @@ def test_falls_back_to_cache_when_source_fails(make_client, tmp_path):
         assert lookup(c, "нурлан айбар")["status"] == "ok"
 
 
-def test_no_data_returns_503(make_client, tmp_path):
+def test_no_data_answers_unavailable_not_5xx(make_client, tmp_path):
     with make_client(mock_file=tmp_path / "missing.json") as c:
-        assert c.post("/api/schedule/lookup", json={"query": "A B"}).status_code == 503
+        r = c.post("/api/schedule/lookup", json={"query": "A B"})
+        assert r.status_code == 200 and r.json()["status"] == "unavailable"
+        assert c.get("/api/health").json()["status"] == "no_data"
 
 
 def test_rate_limit(make_client):

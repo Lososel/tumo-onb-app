@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -23,6 +24,18 @@ def _load_dotenv(path: Path) -> None:
         os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
+def _int(name: str, default: int) -> int:
+    """Integer env var; a typo ("5m") logs a warning and uses the default instead of crashing."""
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        logging.getLogger(__name__).warning("Ignoring invalid %s=%r; using %d", name, raw, default)
+        return default
+
+
 def _resolve(path: str) -> Path:
     p = Path(path)
     return p if p.is_absolute() else BACKEND_DIR / p
@@ -33,6 +46,11 @@ class Settings:
     data_source: str = "mock"
     google_credentials_file: Path = field(default_factory=lambda: BACKEND_DIR / "credentials.json")
     google_sheet_id: str = ""
+    # Raw service-account JSON in an env var; takes precedence over google_credentials_file.
+    google_credentials_json: str = field(default="", repr=False)
+    # When live data is unavailable AND there is no cached snapshot, serve the mock dataset.
+    # Off by default: in production, fake data turns every real search into "not found".
+    fallback_to_mock: bool = False
     mock_file: Path = field(default_factory=lambda: BACKEND_DIR / "data" / "mock_sheet.json")
     csv_path: Path = field(default_factory=lambda: BACKEND_DIR / "data" / "csv")  # file or folder
     cache_file: Path = field(default_factory=lambda: BACKEND_DIR / "data" / "cache" / "snapshot.json")
@@ -59,16 +77,18 @@ class Settings:
             data_source=env("DATA_SOURCE", "mock").strip().lower(),
             google_credentials_file=_resolve(env("GOOGLE_CREDENTIALS_FILE", "credentials.json")),
             google_sheet_id=env("GOOGLE_SHEET_ID", "").strip(),
+            google_credentials_json=env("GOOGLE_CREDENTIALS_JSON", ""),
+            fallback_to_mock=env("FALLBACK_TO_MOCK", "false").strip().lower() not in _FALSE,
             mock_file=_resolve(env("MOCK_FILE", "data/mock_sheet.json")),
             csv_path=_resolve(env("CSV_PATH", "data/csv")),
             cache_file=_resolve(env("CACHE_FILE", "data/cache/snapshot.json")),
-            sync_interval_seconds=max(30, int(env("SYNC_INTERVAL_SECONDS", "300"))),
+            sync_interval_seconds=max(30, _int("SYNC_INTERVAL_SECONDS", 300)),
             tab_filter=env("TAB_FILTER", "").strip(),
             cors_origins=tuple(
                 o.strip() for o in env("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()
             ),
-            lookup_rate_limit_per_minute=int(env("LOOKUP_RATE_LIMIT_PER_MINUTE", "30")),
-            proxy_hops=max(0, int(env("PROXY_HOPS", "0"))),
+            lookup_rate_limit_per_minute=_int("LOOKUP_RATE_LIMIT_PER_MINUTE", 30),
+            proxy_hops=max(0, _int("PROXY_HOPS", 0)),
             admin_token=env("ADMIN_TOKEN", "").strip(),
             static_dir=_resolve(env("STATIC_DIR", "../frontend/dist")),
             expose_temp_password=env("EXPOSE_TEMP_PASSWORD", "false").strip().lower() not in _FALSE,

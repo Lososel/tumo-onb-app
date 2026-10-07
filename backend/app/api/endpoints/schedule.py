@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+import logging
+
+from fastapi import APIRouter, Depends, Request
 
 from ...core.config import Settings
 from ...models import LearnerRecord
@@ -15,6 +17,7 @@ MIN_TOKEN_LEN = 2
 MAX_RESULTS = 3  # more matches than this means the query is too vague to show anything
 
 router = APIRouter(prefix="/api/schedule", tags=["schedule"])
+log = logging.getLogger(__name__)
 
 
 def client_ip(request: Request) -> str:
@@ -56,12 +59,18 @@ def to_card(r: LearnerRecord, expose_temp_password: bool) -> ScheduleCard:
 
 @router.post("/lookup", response_model=LookupResponse, dependencies=[Depends(rate_limit)])
 def lookup(req: LookupRequest, request: Request) -> LookupResponse:
-    store: LearnerStore = request.app.state.store
-    settings: Settings = request.app.state.settings
+    """Always answers 200 with a status — sync problems never turn into a 5xx here."""
+    try:
+        return _lookup(req, request.app.state.store, request.app.state.settings)
+    except Exception:
+        log.exception("Lookup failed; answering 'unavailable'")
+        return LookupResponse(status="unavailable")
 
+
+def _lookup(req: LookupRequest, store: LearnerStore, settings: Settings) -> LookupResponse:
     snap = store.snapshot
-    if snap is None:
-        raise HTTPException(503, "Schedule data is temporarily unavailable. Please try again shortly.")
+    if snap is None:  # sheet unreachable and nothing cached yet (see /api/health for why)
+        return LookupResponse(status="unavailable")
     updated = snap.fetched_at
 
     tokens = [t for t in name_tokens(req.query) if len(t) >= MIN_TOKEN_LEN]

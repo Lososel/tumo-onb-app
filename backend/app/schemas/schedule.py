@@ -27,7 +27,8 @@ class ScheduleCard(BaseModel):
 
 
 class LookupResponse(BaseModel):
-    status: Literal["ok", "not_found", "inactive", "need_full_name", "too_many"]
+    # "unavailable": no data could be loaded yet (sheet unreachable and no cache) — still HTTP 200.
+    status: Literal["ok", "not_found", "inactive", "need_full_name", "too_many", "unavailable"]
     results: list[ScheduleCard] = Field(default_factory=list)
     data_updated_at: datetime | None = None
 

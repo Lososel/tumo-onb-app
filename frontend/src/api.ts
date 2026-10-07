@@ -19,7 +19,7 @@ export interface Learner {
   status: string | null
 }
 
-export type LookupStatus = 'ok' | 'not_found' | 'inactive' | 'need_full_name' | 'too_many'
+export type LookupStatus = 'ok' | 'not_found' | 'inactive' | 'need_full_name' | 'too_many' | 'unavailable'
 
 export interface LookupResponse {
   status: LookupStatus

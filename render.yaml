@@ -30,6 +30,15 @@ services:
         sync: false # prompted in the dashboard when the Blueprint is created
       - key: GOOGLE_CREDENTIALS_FILE
         value: /etc/secrets/credentials.json # Render secret file (see step 2 above)
+      # Alternative to the secret file: paste the whole service-account JSON here. Takes
+      # precedence when set; escaped "\n" in the private key is handled. Leave empty to use the file.
+      - key: GOOGLE_CREDENTIALS_JSON
+        sync: false
+      # If the sheet is unreachable and nothing is cached yet, lookups answer "unavailable"
+      # (HTTP 200). "true" serves the mock dataset instead — demo/staging only: in production
+      # fake data makes every real search say "not found".
+      - key: FALLBACK_TO_MOCK
+        value: "false"
       # Onboarding: only the tab whose name contains this text is read (case-insensitive).
       # Other tabs are never downloaded. Clear it to search every tab.
       - key: TAB_FILTER

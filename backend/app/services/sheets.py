@@ -27,6 +27,7 @@ also dropped from extra_info.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import unicodedata
@@ -36,6 +37,69 @@ from typing import Any
 from ..models import LearnerRecord, Snapshot
 
 log = logging.getLogger(__name__)
+
+
+# ---------- Google credentials ----------
+
+
+class SheetsConfigError(Exception):
+    """Google Sheets is misconfigured (missing sheet id, unreadable/invalid credentials).
+
+    Raised during a sync, never at startup, so the app keeps serving its cache. Messages
+    describe what is wrong but never include credential contents.
+    """
+
+
+_SERVICE_ACCOUNT_FIELDS = ("type", "client_email", "private_key", "token_uri")
+
+
+def parse_credentials_json(raw: str) -> dict:
+    """Parse a service-account key pasted into an env var (GOOGLE_CREDENTIALS_JSON).
+
+    Tolerates the usual copy/paste damage: real newlines inside the private key
+    (strict=False), JSON wrapped in an extra layer of quotes, and a private key whose
+    newlines arrived as literal backslash-n sequences.
+    """
+    text = (raw or "").strip()
+    if not text:
+        raise SheetsConfigError("GOOGLE_CREDENTIALS_JSON is empty")
+    try:
+        info = json.loads(text, strict=False)
+        if isinstance(info, str):  # JSON pasted as a quoted string: '"{\"type\": ...}"'
+            info = json.loads(info, strict=False)
+    except json.JSONDecodeError as exc:
+        raise SheetsConfigError(
+            f"GOOGLE_CREDENTIALS_JSON is not valid JSON (line {exc.lineno}, column {exc.colno})"
+        ) from None
+    if not isinstance(info, dict):
+        raise SheetsConfigError("GOOGLE_CREDENTIALS_JSON must be a JSON object")
+    missing = [f for f in _SERVICE_ACCOUNT_FIELDS if not info.get(f)]
+    if missing or info.get("type") != "service_account":
+        raise SheetsConfigError(
+            "GOOGLE_CREDENTIALS_JSON is not a service-account key (missing: "
+            + (", ".join(missing) or "type=service_account")
+            + ")"
+        )
+    key = str(info["private_key"])
+    if "\\n" in key:
+        key = key.replace("\\r\\n", "\n").replace("\\n", "\n")
+    info["private_key"] = key.replace("\r\n", "\n")
+    return info
+
+
+def load_credentials_file(path) -> dict:
+    """Read and validate a service-account key file (GOOGLE_CREDENTIALS_FILE)."""
+    try:
+        raw = open(path, encoding="utf-8-sig").read()
+    except FileNotFoundError:
+        raise SheetsConfigError(f"credentials file not found: {path}") from None
+    except OSError as exc:
+        raise SheetsConfigError(f"credentials file unreadable: {path} ({type(exc).__name__})") from None
+    try:
+        return parse_credentials_json(raw)
+    except SheetsConfigError as exc:
+        message = str(exc).replace("GOOGLE_CREDENTIALS_JSON", f"credentials file {path}")
+        raise SheetsConfigError(message) from None
 
 # A grid is the tab's cell values, top row first. RawTabs maps tab title -> grid.
 Grid = list[list[Any]]
