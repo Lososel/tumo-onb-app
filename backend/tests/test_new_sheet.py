@@ -218,3 +218,24 @@ def test_startup_syncs_immediately_even_with_a_cache(tmp_path):
                 break
             time.sleep(0.05)
         assert c.post("/api/schedule/lookup", json={"query": "анна смирнова"}).json()["status"] == "ok"
+
+
+@pytest.mark.parametrize(
+    "zone_header", ["Зона", "Зона ", "ЗОНА", "Зона обучения", "Learning Zone", "Локация"]
+)
+def test_zone_added_in_column_j(zone_header):
+    """The team added the zone in column J of "4 поток" (A-H as before, I = some other column)."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "4 поток"
+    ws.append(HEADER + ["Комментарий", zone_header])  # columns A-H, I, J
+    ws.append(["Тестова", "8700", "a@example.com", "Сидоров Максим", "8701", "03.03.2013",
+               "Вторник, Пятница : 15:00–17:00", "Aliya", "позвонить", "WR 5\n3 этаж"])
+    ws.append(["Примерова", "8702", "b@example.com", "Жұмабек Әлия", "8703", "04.04.2012",
+               "Понедельник, Четверг : 10:30–12:30", "Nazym", "", None])  # zone not filled yet
+    buf = BytesIO()
+    wb.save(buf)
+    assert ws.cell(row=1, column=10).column_letter == "J"
+    maxim, aliya = parse_tabs(xlsx_to_tabs(buf.getvalue()), source="test").learners
+    assert maxim.room == "WR 5, 3 этаж"
+    assert aliya.room == ""  # empty cell -> API answers "Уточняется"

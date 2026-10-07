@@ -145,7 +145,10 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "full_name": ("full name", "fullname", "name", "фио", "аты жөні", "имя фамилия", "учащийся", "ученик"),
     "schedule": ("schedule", "расписание", "график", "кесте"),
     "coach_name": ("coach", "coach name", "коуч", "куратор"),
-    "room": ("room", "кабинет", "комната", "аудитория", "бөлме", "зона", "zone", "learning zone"),
+    "room": (
+        "room", "кабинет", "комната", "аудитория", "бөлме", "зона", "zone", "learning zone",
+        "локация", "location",
+    ),
     "default_email": (
         "email", "e mail", "mail", "почта", "электронная почта", "default email",
         "почта tumo", "tumo email", "tumo почта", "tumo mail",
