@@ -155,6 +155,18 @@ def test_rate_limit(make_client):
         assert c.post("/api/schedule/lookup", json={"query": "Иван Иванов"}).status_code == 429
 
 
+def test_rate_limit_uses_proxy_client_ip(make_client):
+    def post(c, xff):
+        return c.post("/api/schedule/lookup", json={"query": "Иван Иванов"}, headers={"X-Forwarded-For": xff})
+
+    with make_client(lookup_rate_limit_per_minute=1, proxy_hops=1) as c:
+        assert post(c, "203.0.113.1").status_code == 200
+        assert post(c, "203.0.113.2").status_code == 200  # a different user behind the same proxy
+        assert post(c, "203.0.113.1").status_code == 429
+        # A forged left-most entry doesn't help: the proxy-appended right-most entry is used.
+        assert post(c, "198.51.100.9, 203.0.113.1").status_code == 429
+
+
 def test_admin_refresh_disabled_by_default(make_client):
     with make_client() as c:
         assert c.post("/api/admin/refresh").status_code == 404

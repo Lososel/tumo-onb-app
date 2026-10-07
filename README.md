@@ -126,7 +126,22 @@ Export each tab with *File → Download → CSV* and put the files in `backend/d
 
 ## Deploying
 
-The simplest option is one container, which serves both the API and the built frontend:
+### Render (Blueprint)
+
+`render.yaml` defines one Docker web service in Frankfurt with a health check on `/api/health`.
+
+1. In Render, choose **New → Blueprint**, pick this repository, and enter `GOOGLE_SHEET_ID` when prompted. Render deploys from the repository's default branch.
+2. In the service, go to **Environment → Secret Files** and add `credentials.json` with the service-account key. Render mounts it at `/etc/secrets/credentials.json`. Share the sheet with the service account's email.
+3. `ADMIN_TOKEN` is generated for you; copy it from the Environment tab if you want `/api/admin/refresh`.
+
+Notes:
+- **`plan: free` sleeps after ~15 minutes idle.** The first visitor then waits for a cold start, and sheet syncing pauses while asleep. Switch to `starter` for always-on.
+- **`PROXY_HOPS=1`** makes rate limiting use the client IP that Render's proxy appends to `X-Forwarded-For`. Without it, every visitor would share one limit. After the first deploy, check that one visitor hitting the limit doesn't block others.
+- **`EXPOSE_TEMP_PASSWORD` is `false`.** Change it in the Environment tab for onboarding week only.
+
+### Any Docker host
+
+The simplest option is one container, which serves both the API and the built frontend. It listens on `$PORT` (default 8000):
 
 ```bash
 docker build -t tumo-schedule .
@@ -138,6 +153,6 @@ docker run -p 8000:8000 \
 
 Without Docker: run `npm run build` in `frontend/`, then run uvicorn in `backend/`. FastAPI serves `frontend/dist` automatically when it exists (`STATIC_DIR`).
 
-Behind a reverse proxy, set `FORWARDED_ALLOW_IPS` to the proxy's IP so rate limiting sees each client's real IP.
+Behind reverse proxies, set `PROXY_HOPS` to the number of proxies that append to `X-Forwarded-For`, so rate limiting sees each client's real IP.
 
 All settings are listed in `backend/.env.example` and `frontend/.env.example`.

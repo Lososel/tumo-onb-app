@@ -39,6 +39,9 @@ class Settings:
     sync_interval_seconds: int = 300
     cors_origins: tuple[str, ...] = ("http://localhost:5173",)
     lookup_rate_limit_per_minute: int = 30
+    # Reverse proxies in front of the app that append to X-Forwarded-For (Render: 1). The client
+    # IP for rate limiting is the Nth entry from the right; 0 = use the socket peer address.
+    proxy_hops: int = 0
     admin_token: str = ""  # enables POST /api/admin/refresh when set
     static_dir: Path | None = None  # built frontend to serve (optional)
     # EXPOSE_TEMP_PASSWORD: include the sheet's temporary password in lookup responses.
@@ -61,6 +64,7 @@ class Settings:
                 o.strip() for o in env("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()
             ),
             lookup_rate_limit_per_minute=int(env("LOOKUP_RATE_LIMIT_PER_MINUTE", "30")),
+            proxy_hops=max(0, int(env("PROXY_HOPS", "0"))),
             admin_token=env("ADMIN_TOKEN", "").strip(),
             static_dir=_resolve(env("STATIC_DIR", "../frontend/dist")),
             expose_temp_password=env("EXPOSE_TEMP_PASSWORD", "false").strip().lower() not in _FALSE,

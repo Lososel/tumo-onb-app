@@ -17,8 +17,20 @@ MAX_RESULTS = 3  # more matches than this means the query is too vague to show a
 router = APIRouter(prefix="/api/schedule", tags=["schedule"])
 
 
+def client_ip(request: Request) -> str:
+    """Rate-limit key. Behind N proxies, each appends the address it received the request from,
+    so the Nth entry from the right of X-Forwarded-For is the real client. Entries further left
+    are client-supplied and could be forged, so they are never used."""
+    hops = request.app.state.settings.proxy_hops
+    if hops:
+        forwarded = [p.strip() for p in request.headers.get("x-forwarded-for", "").split(",") if p.strip()]
+        if len(forwarded) >= hops:
+            return forwarded[-hops]
+    return request.client.host if request.client else "unknown"
+
+
 def rate_limit(request: Request) -> None:
-    request.app.state.limiter.check(request.client.host if request.client else "unknown")
+    request.app.state.limiter.check(client_ip(request))
 
 
 def to_card(r: LearnerRecord, expose_temp_password: bool) -> ScheduleCard:

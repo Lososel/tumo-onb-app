@@ -1,0 +1,46 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+#
+# One Docker web service: the Dockerfile builds the Vue frontend and serves it together with
+# the FastAPI backend from a single uvicorn process.
+#
+# After creating the Blueprint in the Render dashboard:
+#   1. Enter GOOGLE_SHEET_ID when prompted (the long id in the sheet's URL).
+#   2. Service → Environment → Secret Files: add `credentials.json` with the Google service
+#      account key. Render mounts it at /etc/secrets/credentials.json. Share the sheet with the
+#      service account's email (Viewer is enough).
+#   3. Optional: copy the generated ADMIN_TOKEN to force a re-sync after editing the sheet:
+#        curl -X POST -H "X-Admin-Token: <token>" https://<service>.onrender.com/api/admin/refresh
+
+services:
+  - type: web
+    name: tumo-astana-schedule
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    region: frankfurt # closest Render region to Kazakhstan
+    # Free instances sleep after ~15 min idle, so the first visitor waits for a cold start and
+    # the background sheet sync pauses while asleep. Use "starter" for an always-on service.
+    plan: free
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: DATA_SOURCE
+        value: google
+      - key: GOOGLE_SHEET_ID
+        sync: false # prompted in the dashboard when the Blueprint is created
+      - key: GOOGLE_CREDENTIALS_FILE
+        value: /etc/secrets/credentials.json # Render secret file (see step 2 above)
+      - key: SYNC_INTERVAL_SECONDS
+        value: "300"
+      - key: LOOKUP_RATE_LIMIT_PER_MINUTE
+        value: "30"
+      # Render's proxy appends the client IP to X-Forwarded-For; rate limiting uses that entry
+      # instead of the proxy's address (otherwise all visitors would share one limit).
+      - key: PROXY_HOPS
+        value: "1"
+      # Temporary passwords on the schedule card. Keep "false" outside onboarding: while "true",
+      # anyone who knows a learner's full name can see their temporary password.
+      - key: EXPOSE_TEMP_PASSWORD
+        value: "false"
+      - key: ADMIN_TOKEN
+        generateValue: true

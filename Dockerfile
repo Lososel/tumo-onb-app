@@ -13,6 +13,10 @@ COPY backend/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ ./
 COPY --from=frontend /app/frontend/dist /app/frontend/dist
+# Run unprivileged; the app only needs to write its snapshot cache under data/cache.
+RUN useradd --create-home --uid 10001 app && mkdir -p data/cache && chown -R app data
+USER app
 EXPOSE 8000
-# Mount credentials.json and set DATA_SOURCE=google / GOOGLE_SHEET_ID at runtime for live data.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+# Hosts like Render pass the port in $PORT; 8000 locally. For live data set DATA_SOURCE=google,
+# GOOGLE_SHEET_ID and mount the service-account key (GOOGLE_CREDENTIALS_FILE) at runtime.
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
