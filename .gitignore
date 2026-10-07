@@ -17,3 +17,6 @@ backend/data/cache/
 node_modules/
 dist/
 *.local
+
+# Personal Claude Code settings
+.claude/settings.local.json
