@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Request
 from ...core.config import Settings
 from ...models import LearnerRecord
 from ...schemas.schedule import LookupRequest, LookupResponse, ScheduleCard
+from ...services.coaches import CoachDirectory
 from ...services.sheets import name_tokens
 from ...store import LearnerStore
 
@@ -39,16 +40,21 @@ def rate_limit(request: Request) -> None:
 PENDING = "Уточняется"  # shown for room/email until the sheet has the column (or the cell is filled)
 
 
-def to_card(r: LearnerRecord, expose_temp_password: bool) -> ScheduleCard:
+def to_card(
+    r: LearnerRecord, expose_temp_password: bool, coaches: CoachDirectory | None = None
+) -> ScheduleCard:
     """Map an internal record to the public card. tumo_id and extra_info are never copied.
 
     room and default_email fall back to "Уточняется" when the sheet has no such column yet
     or the cell is empty; temp_password falls back to null.
     """
+    # Sheet's short coach name ("Alinur") -> full name + work email from data/coaches.json.
+    coach_name, coach_email = (coaches or CoachDirectory()).resolve(r.coach_name)
     return ScheduleCard(
         full_name=r.full_name,
         schedule=r.schedule or None,
-        coach_name=r.coach_name or None,
+        coach_name=coach_name or None,
+        coach_email=coach_email,
         room=r.room or PENDING,
         default_email=r.default_email or PENDING,
         temp_password=(r.temp_password or None) if expose_temp_password else None,
@@ -61,13 +67,16 @@ def to_card(r: LearnerRecord, expose_temp_password: bool) -> ScheduleCard:
 def lookup(req: LookupRequest, request: Request) -> LookupResponse:
     """Always answers 200 with a status — sync problems never turn into a 5xx here."""
     try:
-        return _lookup(req, request.app.state.store, request.app.state.settings)
+        state = request.app.state
+        return _lookup(req, state.store, state.settings, getattr(state, "coaches", None))
     except Exception:
         log.exception("Lookup failed; answering 'unavailable'")
         return LookupResponse(status="unavailable")
 
 
-def _lookup(req: LookupRequest, store: LearnerStore, settings: Settings) -> LookupResponse:
+def _lookup(
+    req: LookupRequest, store: LearnerStore, settings: Settings, coaches: CoachDirectory | None = None
+) -> LookupResponse:
     snap = store.snapshot
     if snap is None:  # sheet unreachable and nothing cached yet (see /api/health for why)
         return LookupResponse(status="unavailable")
@@ -87,6 +96,6 @@ def _lookup(req: LookupRequest, store: LearnerStore, settings: Settings) -> Look
         return LookupResponse(status="too_many", data_updated_at=updated)
     return LookupResponse(
         status="ok",
-        results=[to_card(r, settings.expose_temp_password) for r in active],
+        results=[to_card(r, settings.expose_temp_password, coaches) for r in active],
         data_updated_at=updated,
     )

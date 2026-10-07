@@ -29,6 +29,7 @@ const kk: Messages = {
   card: {
     schedule: 'Оқу кестесі',
     coach: 'Коуч',
+    coachEmail: 'Коучтың email-ы',
     room: 'Кабинет',
     email: 'TUMO поштасы',
     password: 'Уақытша құпия сөз',

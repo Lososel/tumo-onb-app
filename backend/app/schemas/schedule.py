@@ -18,7 +18,8 @@ class LookupRequest(BaseModel):
 class ScheduleCard(BaseModel):
     full_name: str
     schedule: str | None = None
-    coach_name: str | None = None
+    coach_name: str | None = None  # full name from the coach directory when recognised
+    coach_email: str | None = None  # work email, only when the coach is unambiguously identified
     room: str | None = None
     default_email: str | None = None
     temp_password: str | None = None  # None unless EXPOSE_TEMP_PASSWORD is enabled

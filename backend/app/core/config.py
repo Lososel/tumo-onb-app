@@ -53,6 +53,7 @@ class Settings:
     fallback_to_mock: bool = False
     mock_file: Path = field(default_factory=lambda: BACKEND_DIR / "data" / "mock_sheet.json")
     csv_path: Path = field(default_factory=lambda: BACKEND_DIR / "data" / "csv")  # file or folder
+    coaches_file: Path = field(default_factory=lambda: BACKEND_DIR / "data" / "coaches.json")
     cache_file: Path = field(default_factory=lambda: BACKEND_DIR / "data" / "cache" / "snapshot.json")
     sync_interval_seconds: int = 300
     # Only tabs whose name contains this text are searched (case/space-insensitive), e.g.
@@ -81,6 +82,7 @@ class Settings:
             fallback_to_mock=env("FALLBACK_TO_MOCK", "false").strip().lower() not in _FALSE,
             mock_file=_resolve(env("MOCK_FILE", "data/mock_sheet.json")),
             csv_path=_resolve(env("CSV_PATH", "data/csv")),
+            coaches_file=_resolve(env("COACHES_FILE", "data/coaches.json")),
             cache_file=_resolve(env("CACHE_FILE", "data/cache/snapshot.json")),
             sync_interval_seconds=max(30, _int("SYNC_INTERVAL_SECONDS", 300)),
             tab_filter=env("TAB_FILTER", "").strip(),

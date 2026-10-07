@@ -35,9 +35,11 @@ const community = computed(() =>
 const known = (v: string | null) => (v === PENDING ? null : v)
 
 const fields = computed(() => [
+  // Two columns: schedule | room, coach | coach email, TUMO email.
   { label: t.value.card.schedule, value: localized(props.learner.schedule) },
-  { label: t.value.card.coach, value: coachName(props.learner.coach_name, locale.value) },
   { label: t.value.card.room, value: known(props.learner.room) },
+  { label: t.value.card.coach, value: coachName(props.learner.coach_name, locale.value) },
+  { label: t.value.card.coachEmail, value: props.learner.coach_email, mailto: true },
   { label: t.value.card.email, value: known(props.learner.default_email) },
 ])
 
@@ -81,7 +83,14 @@ async function copyPassword() {
     <dl class="mt-5 grid gap-x-8 gap-y-5 sm:mt-6 sm:grid-cols-2">
       <div v-for="f in fields" :key="f.label" class="min-w-0">
         <dt class="text-xs font-bold tracking-wider text-slate-500 uppercase">{{ f.label }}</dt>
-        <dd class="mt-1 text-lg font-semibold break-words text-ink">{{ f.value || t.card.notSet }}</dd>
+        <dd class="mt-1 text-lg font-semibold break-words text-ink">
+          <a
+            v-if="f.mailto && f.value"
+            :href="`mailto:${f.value}`"
+            class="font-medium text-brand-500 hover:underline"
+          >{{ f.value }}</a>
+          <template v-else>{{ f.value || t.card.notSet }}</template>
+        </dd>
       </div>
     </dl>
 

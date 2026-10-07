@@ -15,6 +15,7 @@ from .api.endpoints import schedule
 from .core.config import Settings
 from .core.rate_limit import RateLimiter
 from .schemas.schedule import HealthResponse
+from .services.coaches import CoachDirectory
 from .sources import build_fallback_source, build_source
 from .store import LearnerStore
 
@@ -43,6 +44,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.store = store
     app.state.limiter = RateLimiter(settings.lookup_rate_limit_per_minute)
+    app.state.coaches = CoachDirectory.load(settings.coaches_file)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(settings.cors_origins),

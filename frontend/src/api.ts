@@ -10,6 +10,8 @@ export interface Learner {
   full_name: string
   schedule: string | null
   coach_name: string | null
+  /** coach's work email from the coach directory; null if unknown/ambiguous */
+  coach_email: string | null
   room: string | null
   default_email: string | null
   /** null unless the backend has EXPOSE_TEMP_PASSWORD enabled */

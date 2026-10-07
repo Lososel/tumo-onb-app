@@ -9,7 +9,8 @@ from app.main import create_app
 
 MOCK = BACKEND_DIR / "data" / "mock_sheet.json"
 CARD_FIELDS = {
-    "full_name", "schedule", "coach_name", "room", "default_email", "temp_password", "status_code", "status",
+    "full_name", "schedule", "coach_name", "coach_email", "room", "default_email", "temp_password",
+    "status_code", "status",
 }
 
 
@@ -35,7 +36,8 @@ def test_lookup_returns_schedule_card(make_client):
         assert card == {
             "full_name": "Айбар Нұрлан Серікұлы",
             "schedule": "Вторник/Пятница 16:30-18:30",
-            "coach_name": "Aliya",
+            "coach_name": "Aliya",  # not in the coach directory: shown as written, no email
+            "coach_email": None,
             "room": "Lab 2",
             "default_email": "aibar.nurlan@example.com",
             "temp_password": None,  # EXPOSE_TEMP_PASSWORD defaults to off
