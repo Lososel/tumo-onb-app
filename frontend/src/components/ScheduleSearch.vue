@@ -89,7 +89,7 @@ const updatedAt = computed(() => {
       </button>
     </form>
 
-    <div aria-live="polite" class="mt-8 space-y-5">
+    <div aria-live="polite" class="mt-8 space-y-5 empty:hidden">
       <p
         v-if="message"
         class="rounded-2xl border-2 border-dashed border-brand-200 bg-brand-50 px-5 py-4 text-slate-700"
@@ -101,6 +101,27 @@ const updatedAt = computed(() => {
         <ScheduleCard v-for="(l, i) in result.results" :key="i" :learner="l" />
         <p v-if="updatedAt" class="text-center text-sm text-slate-400">{{ updatedAt }}</p>
       </template>
+    </div>
+
+    <!-- Before a search this sits right under the input; results, when shown, come first. -->
+    <div class="mt-8 sm:mt-10">
+      <h3 class="font-display text-lg font-black text-ink sm:text-xl">{{ t.search.firstDay.title }}</h3>
+      <ol class="mt-4 grid gap-3 sm:grid-cols-3 sm:gap-4">
+        <li
+          v-for="(step, i) in t.search.firstDay.steps"
+          :key="i"
+          class="flex gap-3 rounded-2xl border-2 border-brand-100 bg-brand-50 p-4 sm:flex-col sm:p-5"
+        >
+          <span
+            class="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-500 font-display text-lg font-black text-white"
+            aria-hidden="true"
+          >{{ i + 1 }}</span>
+          <p class="text-base leading-snug text-slate-700">
+            <strong class="block font-bold text-ink">{{ step.title }}</strong>
+            {{ step.text }}
+          </p>
+        </li>
+      </ol>
     </div>
   </section>
 </template>
