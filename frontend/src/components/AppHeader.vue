@@ -7,11 +7,9 @@ const locales: Locale[] = ['ru', 'kk']
 <template>
   <header class="bg-black">
     <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:h-[5.5rem] sm:px-8">
-      <a href="/" class="flex items-baseline gap-1.5 text-white" aria-label="TUMO Astana">
-        <span class="font-display text-2xl font-black tracking-tight sm:text-3xl" style="-webkit-text-stroke: 0.5px #fff">
-          TUMO
-        </span>
-        <span class="font-display text-base font-black lowercase sm:text-lg">astana</span>
+      <a href="/" class="block shrink-0" aria-label="TUMO Astana">
+        <!-- White logo on transparent background (600×139), sized by height for the black header. -->
+        <img src="/logo.png" alt="TUMO Astana" width="600" height="139" class="h-7 w-auto sm:h-10" />
       </a>
 
       <div
