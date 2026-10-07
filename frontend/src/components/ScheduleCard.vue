@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, useId, watch } from 'vue'
-import type { Learner } from '../api'
+import { PENDING, type Learner } from '../api'
 import { localized, t } from '../i18n'
 
 const props = defineProps<{ learner: Learner }>()
@@ -24,11 +24,14 @@ const statusNote = computed(() => {
   return code !== 'other' ? t.value.statusNote[code] : ''
 })
 
+// The API's "Уточняется" placeholder becomes null here so it renders as the localized t.card.notSet.
+const known = (v: string | null) => (v === PENDING ? null : v)
+
 const fields = computed(() => [
   { label: t.value.card.schedule, value: localized(props.learner.schedule) },
   { label: t.value.card.coach, value: props.learner.coach_name },
-  { label: t.value.card.room, value: props.learner.room },
-  { label: t.value.card.email, value: props.learner.default_email },
+  { label: t.value.card.room, value: known(props.learner.room) },
+  { label: t.value.card.email, value: known(props.learner.default_email) },
 ])
 
 // Temporary password: masked until the learner asks to see it; re-masked for every new result.

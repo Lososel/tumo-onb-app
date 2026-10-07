@@ -23,7 +23,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
-    store = LearnerStore(build_source(settings), settings.cache_file, settings.sync_interval_seconds)
+    store = LearnerStore(
+        build_source(settings), settings.cache_file, settings.sync_interval_seconds, settings.tab_filter
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):

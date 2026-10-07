@@ -24,8 +24,9 @@ log = logging.getLogger(__name__)
 
 
 class LearnerStore:
-    def __init__(self, source: DataSource, cache_file: Path, sync_interval: int):
+    def __init__(self, source: DataSource, cache_file: Path, sync_interval: int, tab_filter: str = ""):
         self.source = source
+        self.tab_filter = tab_filter
         self.cache_file = cache_file
         self.sync_interval = sync_interval
         self._snapshot: Snapshot | None = None
@@ -82,7 +83,7 @@ class LearnerStore:
         """Fetch from the source; on any failure keep serving the previous snapshot."""
         self.last_sync_attempt = datetime.now(timezone.utc)
         try:
-            snapshot = parse_tabs(self.source.fetch(), source=self.source.name)
+            snapshot = parse_tabs(self.source.fetch(), source=self.source.name, tab_filter=self.tab_filter)
         except Exception as exc:
             # Keep only the exception type: messages can contain URLs/IDs we don't want to expose.
             self.last_sync_error = type(exc).__name__

@@ -33,14 +33,21 @@ def rate_limit(request: Request) -> None:
     request.app.state.limiter.check(client_ip(request))
 
 
+PENDING = "Уточняется"  # shown for room/email until the sheet has the column (or the cell is filled)
+
+
 def to_card(r: LearnerRecord, expose_temp_password: bool) -> ScheduleCard:
-    """Map an internal record to the public card. tumo_id and extra_info are never copied."""
+    """Map an internal record to the public card. tumo_id and extra_info are never copied.
+
+    room and default_email fall back to "Уточняется" when the sheet has no such column yet
+    or the cell is empty; temp_password falls back to null.
+    """
     return ScheduleCard(
         full_name=r.full_name,
         schedule=r.schedule or None,
         coach_name=r.coach_name or None,
-        room=r.room or None,
-        default_email=r.default_email or None,
+        room=r.room or PENDING,
+        default_email=r.default_email or PENDING,
         temp_password=(r.temp_password or None) if expose_temp_password else None,
         status_code=r.status_code,
         status=r.status or None,

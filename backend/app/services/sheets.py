@@ -6,8 +6,8 @@ header name, so column order and exact wording can change freely:
   full_name        "ФИО", "ФИО ребенка", "ФИО ученика", "Full Name" ...   (required)
   schedule         "Расписание", "График", "Schedule"
   coach_name       "Coach", "Коуч"            (active coach)
-  room             "Зона", "Кабинет", "Комната", "Room"
-  default_email    "Почта TUMO", "Почта", "Email", "E-mail"
+  room             "Зона", "learning_zone", "Кабинет", "Комната", "Room"
+  default_email    "Почта TUMO", "default_email", "Почта", "Email", "E-mail"
   temp_password    "Временный пароль", "Пароль", "Password"
   tumo_id          "TUMO ID", "ID"
   status           "Статус", "Status"   (optional)
@@ -27,12 +27,15 @@ also dropped from extra_info.
 
 from __future__ import annotations
 
+import logging
 import re
 import unicodedata
 from datetime import datetime, timezone
 from typing import Any
 
 from ..models import LearnerRecord, Snapshot
+
+log = logging.getLogger(__name__)
 
 # A grid is the tab's cell values, top row first. RawTabs maps tab title -> grid.
 Grid = list[list[Any]]
@@ -43,9 +46,9 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "full_name": ("full name", "fullname", "name", "фио", "аты жөні", "имя фамилия", "учащийся", "ученик"),
     "schedule": ("schedule", "расписание", "график", "кесте"),
     "coach_name": ("coach", "coach name", "коуч", "куратор"),
-    "room": ("room", "кабинет", "комната", "аудитория", "бөлме", "зона", "zone"),
+    "room": ("room", "кабинет", "комната", "аудитория", "бөлме", "зона", "zone", "learning zone"),
     "default_email": (
-        "email", "e mail", "mail", "почта", "электронная почта",
+        "email", "e mail", "mail", "почта", "электронная почта", "default email",
         "почта tumo", "tumo email", "tumo почта", "tumo mail",
     ),
     "temp_password": ("password", "temp password", "пароль", "временный пароль", "құпия сөз"),
@@ -266,16 +269,58 @@ def parse_grid(tab: str, grid: Grid) -> list[LearnerRecord]:
     return learners
 
 
-def parse_tabs(raw: RawTabs, source: str) -> Snapshot:
-    """Parse every tab; the same TUMO ID appearing in several tabs is kept once (first wins)."""
+def _tab_key(title: str) -> str:
+    return " ".join(title.casefold().replace("ё", "е").split())
+
+
+def select_tabs(titles: list[str], tab_filter: str) -> list[str]:
+    """Tabs whose title contains `tab_filter` (case/space-insensitive, e.g. "4 поток").
+
+    No filter -> all tabs. A filter that matches nothing also falls back to all tabs (with a
+    warning), so a renamed tab degrades to "search everything" instead of an empty site.
+    """
+    wanted = _tab_key(tab_filter)
+    if not wanted:
+        return list(titles)
+    picked = [t for t in titles if wanted in _tab_key(t)]
+    if not picked:
+        log.warning("No tab matches TAB_FILTER=%r; searching all %d tabs", tab_filter, len(titles))
+        return list(titles)
+    return picked
+
+
+# Fields a later duplicate row may fill in when the first row left them empty.
+_MERGEABLE = (
+    "schedule", "coach_name", "prev_coach_name", "room", "default_email", "temp_password", "tumo_id",
+)
+
+
+def parse_tabs(raw: RawTabs, source: str, tab_filter: str = "") -> Snapshot:
+    """Parse the selected tabs into one learner list, each student exactly once.
+
+    Duplicates are recognised by TUMO ID or, failing that, by normalized full name (order,
+    case, spacing and Kazakh letters ignored). The first row wins; empty fields on it are
+    filled from later duplicates.
+    """
     learners: list[LearnerRecord] = []
-    seen_ids: set[str] = set()
-    for tab, grid in raw.items():
-        for rec in parse_grid(tab, grid):
-            key = normalize_tumo_id(rec.tumo_id)
-            if key:
-                if key in seen_ids:
-                    continue
-                seen_ids.add(key)
+    by_id: dict[str, LearnerRecord] = {}
+    by_name: dict[str, LearnerRecord] = {}
+    for tab in select_tabs(list(raw), tab_filter):
+        for rec in parse_grid(tab, raw[tab]):
+            id_key = normalize_tumo_id(rec.tumo_id)
+            name_key = " ".join(sorted(rec.tokens))
+            first = (by_id.get(id_key) if id_key else None) or by_name.get(name_key)
+            if first is not None:
+                for f in _MERGEABLE:
+                    if not getattr(first, f) and getattr(rec, f):
+                        setattr(first, f, getattr(rec, f))
+                if first.status_code == "schedule_pending" and first.schedule:
+                    first.status_code = _status_code(first.status, first.schedule)
+                if id_key:
+                    by_id.setdefault(id_key, first)
+                continue
             learners.append(rec)
+            by_name[name_key] = rec
+            if id_key:
+                by_id[id_key] = rec
     return Snapshot(learners=learners, fetched_at=datetime.now(timezone.utc), source=source)

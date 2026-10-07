@@ -2,6 +2,9 @@ import axios from 'axios'
 
 export type StatusCode = 'active_schedule' | 'waitlist' | 'schedule_pending' | 'schedule_changed' | 'coach_changed'
 
+/** Placeholder the API sends for room/email the sheet doesn't have yet; shown localized. */
+export const PENDING = 'Уточняется'
+
 /** One learner's schedule card, as returned by POST /api/schedule/lookup. */
 export interface Learner {
   full_name: string

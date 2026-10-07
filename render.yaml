@@ -30,6 +30,10 @@ services:
         sync: false # prompted in the dashboard when the Blueprint is created
       - key: GOOGLE_CREDENTIALS_FILE
         value: /etc/secrets/credentials.json # Render secret file (see step 2 above)
+      # Onboarding: only the tab whose name contains this text is read (case-insensitive).
+      # Other tabs are never downloaded. Clear it to search every tab.
+      - key: TAB_FILTER
+        value: 4 поток
       - key: SYNC_INTERVAL_SECONDS
         value: "300"
       - key: LOOKUP_RATE_LIMIT_PER_MINUTE

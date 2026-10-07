@@ -37,6 +37,9 @@ class Settings:
     csv_path: Path = field(default_factory=lambda: BACKEND_DIR / "data" / "csv")  # file or folder
     cache_file: Path = field(default_factory=lambda: BACKEND_DIR / "data" / "cache" / "snapshot.json")
     sync_interval_seconds: int = 300
+    # Only tabs whose name contains this text are searched (case/space-insensitive), e.g.
+    # "4 поток". Empty = all tabs. If no tab matches, all tabs are used (logged as a warning).
+    tab_filter: str = ""
     cors_origins: tuple[str, ...] = ("http://localhost:5173",)
     lookup_rate_limit_per_minute: int = 30
     # Reverse proxies in front of the app that append to X-Forwarded-For (Render: 1). The client
@@ -60,6 +63,7 @@ class Settings:
             csv_path=_resolve(env("CSV_PATH", "data/csv")),
             cache_file=_resolve(env("CACHE_FILE", "data/cache/snapshot.json")),
             sync_interval_seconds=max(30, int(env("SYNC_INTERVAL_SECONDS", "300"))),
+            tab_filter=env("TAB_FILTER", "").strip(),
             cors_origins=tuple(
                 o.strip() for o in env("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()
             ),

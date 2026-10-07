@@ -84,6 +84,9 @@ Every tab is read, so you can keep one tab per batch or group. Columns are match
   - With no `Статус` column, the badge shows **"Активный график"** when a schedule is filled in and **"График уточняется"** when it isn't. A schedule containing "(лист ожидания)" shows **"Лист ожидания"**.
   - Recognised status values: `График изменен`, `Коуч изменен`, `В обработке`, `Неактивен`.
   - `Неактивен` hides the learner's card. Any other status text is shown as typed.
+- **Tab targeting:** set `TAB_FILTER` (for example `4 поток`, the default in `render.yaml`) to search only tabs whose name contains that text, ignoring case and spacing. Other tabs aren't even downloaded. If no tab matches, all tabs are searched and a warning is logged.
+- **Columns not added yet:** the room (`Зона` / `learning_zone`), email (`Почта TUMO` / `default_email`) and password (`temp_password`) columns can be missing. Room and email then show "Уточняется" and the password stays hidden. Add the columns whenever they're ready; no code change is needed.
+- **Each student appears once:** duplicates are matched by TUMO ID or full name (ignoring order, case, spacing and Kazakh letters). The first row wins, and its empty fields are filled from later duplicates. Two different children with the same full name would also be merged into one card.
 - **Ambiguous headers:** a header that mentions two fields, such as "Email коуча", isn't treated as the learner's email. It's kept server-side only.
 - **Kazakh mode:** weekday names in the schedule are translated automatically (Вторник → Сейсенбі).
 - **Columns never kept:** columns whose header looks like an IIN (ИИН/ЖСН), phone, birth date, address or parent details are dropped. So are 12-digit IIN-shaped values in other columns. Even so, **don't put IINs in the sheet**.

@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Protocol
 
 from .core.config import Settings
-from .services.sheets import RawTabs
+from .services.sheets import RawTabs, select_tabs
 
 
 class DataSource(Protocol):
@@ -71,11 +71,12 @@ class GoogleSheetsSource:
 
     name = "google"
 
-    def __init__(self, credentials_file: Path, sheet_id: str):
+    def __init__(self, credentials_file: Path, sheet_id: str, tab_filter: str = ""):
         if not sheet_id:
             raise ValueError("GOOGLE_SHEET_ID is required when DATA_SOURCE=google")
         self.credentials_file = credentials_file
         self.sheet_id = sheet_id
+        self.tab_filter = tab_filter
         self._spreadsheet = None
 
     def _open(self):
@@ -93,7 +94,9 @@ class GoogleSheetsSource:
     def fetch(self) -> RawTabs:
         try:
             spreadsheet = self._open()
-            titles = [ws.title for ws in spreadsheet.worksheets()]  # picks up newly added tabs
+            # Picks up newly added tabs; with TAB_FILTER only the matching tabs are downloaded,
+            # so other batches' data never reaches this server.
+            titles = select_tabs([ws.title for ws in spreadsheet.worksheets()], self.tab_filter)
             # Quote titles so names with spaces or punctuation are valid A1 ranges.
             ranges = ["'" + t.replace("'", "''") + "'" for t in titles]
             result = spreadsheet.values_batch_get(ranges) if ranges else {}
@@ -108,7 +111,9 @@ class GoogleSheetsSource:
 
 def build_source(settings: Settings) -> DataSource:
     if settings.data_source == "google":
-        return GoogleSheetsSource(settings.google_credentials_file, settings.google_sheet_id)
+        return GoogleSheetsSource(
+            settings.google_credentials_file, settings.google_sheet_id, settings.tab_filter
+        )
     if settings.data_source == "csv":
         return CsvSource(settings.csv_path)
     return MockJsonSource(settings.mock_file)
