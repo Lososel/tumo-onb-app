@@ -13,24 +13,22 @@ import json
 import logging
 import os
 import threading
-from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .models import Snapshot, StudentRecord
-from .sheet import normalize_name, parse_tabs
+from .models import LearnerRecord, Snapshot
+from .sheet import matches, parse_tabs
 from .sources import DataSource
 
 log = logging.getLogger(__name__)
 
 
-class StudentStore:
+class LearnerStore:
     def __init__(self, source: DataSource, cache_file: Path, sync_interval: int):
         self.source = source
         self.cache_file = cache_file
         self.sync_interval = sync_interval
         self._snapshot: Snapshot | None = None
-        self._index: dict[str, list[StudentRecord]] = {}
         self._lock = threading.Lock()
         self.last_sync_error: str | None = None
         self.last_sync_attempt: datetime | None = None
@@ -42,19 +40,18 @@ class StudentStore:
     def snapshot(self) -> Snapshot | None:
         return self._snapshot
 
-    def find(self, name: str) -> list[StudentRecord]:
-        key = normalize_name(name)
-        return list(self._index.get(key, [])) if key else []
+    def search(self, query_tokens: list[str]) -> list[LearnerRecord]:
+        """Linear scan — a few thousand learners take well under a millisecond."""
+        snap = self._snapshot
+        if snap is None or not query_tokens:
+            return []
+        return [r for r in snap.learners if matches(query_tokens, r.tokens)]
 
     # ---------- writes ----------
 
     def _install(self, snapshot: Snapshot) -> None:
-        index: dict[str, list[StudentRecord]] = defaultdict(list)
-        for s in snapshot.students:
-            index[s.name_key].append(s)
-        with self._lock:  # swap atomically; readers always see a complete snapshot
+        with self._lock:  # single reference swap; readers always see a complete snapshot
             self._snapshot = snapshot
-            self._index = dict(index)
 
     def load_from_disk(self) -> bool:
         try:
@@ -90,7 +87,7 @@ class StudentStore:
         self._install(snapshot)
         self._persist(snapshot)
         self.last_sync_error = None
-        log.info("Synced %d students from %s", len(snapshot.students), self.source.name)
+        log.info("Synced %d learners from %s", len(snapshot.learners), self.source.name)
         return True
 
     async def refresh_async(self) -> bool:

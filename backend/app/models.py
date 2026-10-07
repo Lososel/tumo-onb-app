@@ -1,10 +1,10 @@
 """Data models.
 
-Internal models (Snapshot, StudentRecord, Workshop) hold only whitelisted fields parsed from
-the sheet — anything else in the sheet (e.g. an IIN or phone column someone adds by mistake)
-is dropped during parsing and never cached or persisted.
+The internal models (Snapshot, LearnerRecord) hold only allow-listed fields parsed from
+the sheet. Anything else in the sheet, such as an IIN or phone column added by mistake,
+is dropped during parsing and never cached or saved.
 
-Public models (*Out, LookupResponse) are the only shapes ever sent to the frontend.
+The public models (*Out, LookupResponse) are the only shapes ever sent to the frontend.
 """
 
 from __future__ import annotations
@@ -12,36 +12,31 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 # ---------- Internal (cached) ----------
 
 
-class Workshop(BaseModel):
-    id: str
-    name: str
-    teacher: str = ""
-    room: str = ""
-    days: str = ""
-    time: str = ""
-    whatsapp_link: str = ""
-
-
-class StudentRecord(BaseModel):
-    name_key: str  # normalized, order-insensitive lookup key
-    first_name: str
-    last_name: str
+class LearnerRecord(BaseModel):
+    tokens: list[str]  # normalized name tokens used for matching
+    full_name: str
     active: bool = True
-    self_study_days: str = ""
-    self_study_time: str = ""
-    workshop_ids: list[str] = Field(default_factory=list)
-    whatsapp_link: str = ""
+    schedule: str = ""
+    schedule_kk: str = ""
+    self_study_day: str = ""
+    self_study_day_kk: str = ""
+    coach: str = ""
+    coach_email: str = ""
+    stage: str = ""
+    stage_code: str = ""
+    status: str = ""
+    status_code: str = ""
+    note: str = ""
+    note_kk: str = ""
 
 
 class Snapshot(BaseModel):
-    students: list[StudentRecord] = Field(default_factory=list)
-    workshops: dict[str, Workshop] = Field(default_factory=dict)
-    links: dict[str, str] = Field(default_factory=dict)
+    learners: list[LearnerRecord] = Field(default_factory=list)
     fetched_at: datetime
     source: str
 
@@ -50,55 +45,34 @@ class Snapshot(BaseModel):
 
 
 class LookupRequest(BaseModel):
-    first_name: str = Field(default="", max_length=60)
-    last_name: str = Field(default="", max_length=60)
-    full_name: str = Field(default="", max_length=120)
-
-    @model_validator(mode="after")
-    def _require_name(self) -> "LookupRequest":
-        if not (self.full_name.strip() or (self.first_name.strip() and self.last_name.strip())):
-            raise ValueError("Provide full_name, or both first_name and last_name.")
-        return self
-
-    def query(self) -> str:
-        return self.full_name.strip() or f"{self.first_name.strip()} {self.last_name.strip()}"
+    query: str = Field(min_length=1, max_length=120)
 
 
-class SelfStudyOut(BaseModel):
-    days: str
-    time: str
-
-
-class WorkshopOut(BaseModel):
-    name: str
-    teacher: str | None = None
-    room: str | None = None
-    days: str
-    time: str
-
-
-class LinksOut(BaseModel):
-    whatsapp: str | None = None
-
-
-class StudentDashboardOut(BaseModel):
-    first_name: str
-    last_name: str
-    self_study: SelfStudyOut | None = None
-    workshops: list[WorkshopOut] = Field(default_factory=list)
-    links: LinksOut = Field(default_factory=LinksOut)
+class LearnerOut(BaseModel):
+    full_name: str
+    schedule: str | None = None
+    schedule_kk: str | None = None
+    self_study_day: str | None = None
+    self_study_day_kk: str | None = None
+    coach: str | None = None
+    coach_email: str | None = None
+    stage: str | None = None
+    stage_code: str | None = None
+    status: str | None = None
+    status_code: str | None = None
+    note: str | None = None
+    note_kk: str | None = None
 
 
 class LookupResponse(BaseModel):
-    status: Literal["ok", "not_found", "inactive"]
-    message: str
-    students: list[StudentDashboardOut] = Field(default_factory=list)
+    status: Literal["ok", "not_found", "inactive", "need_full_name", "too_many"]
+    results: list[LearnerOut] = Field(default_factory=list)
     data_updated_at: datetime | None = None
 
 
 class HealthResponse(BaseModel):
     status: Literal["ok", "degraded", "no_data"]
     source: str
-    students_cached: int
+    learners_cached: int
     data_updated_at: datetime | None
     last_sync_error: str | None

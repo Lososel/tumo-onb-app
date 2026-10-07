@@ -1,30 +1,26 @@
 import axios from 'axios'
 
-export interface SelfStudy {
-  days: string
-  time: string
+export interface Learner {
+  full_name: string
+  schedule: string | null
+  schedule_kk: string | null
+  self_study_day: string | null
+  self_study_day_kk: string | null
+  coach: string | null
+  coach_email: string | null
+  stage: string | null
+  stage_code: 'self_study' | 'workshop' | 'project' | null
+  status: string | null
+  status_code: 'coach_unchanged' | 'coach_changed' | 'schedule_changed' | 'unchanged' | 'pending' | null
+  note: string | null
+  note_kk: string | null
 }
 
-export interface Workshop {
-  name: string
-  teacher: string | null
-  room: string | null
-  days: string
-  time: string
-}
-
-export interface StudentDashboard {
-  first_name: string
-  last_name: string
-  self_study: SelfStudy | null
-  workshops: Workshop[]
-  links: { whatsapp: string | null }
-}
+export type LookupStatus = 'ok' | 'not_found' | 'inactive' | 'need_full_name' | 'too_many'
 
 export interface LookupResponse {
-  status: 'ok' | 'not_found' | 'inactive'
-  message: string
-  students: StudentDashboard[]
+  status: LookupStatus
+  results: Learner[]
   data_updated_at: string | null
 }
 
@@ -33,20 +29,18 @@ const http = axios.create({
   timeout: 10_000,
 })
 
-/** Uses POST so the student's name never appears in URLs or server access logs. */
-export async function lookupStudent(firstName: string, lastName: string): Promise<LookupResponse> {
-  const { data } = await http.post<LookupResponse>('/api/students/lookup', {
-    first_name: firstName.trim(),
-    last_name: lastName.trim(),
-  })
+/** POST keeps the learner's name out of URLs and server access logs. */
+export async function lookupSchedule(query: string): Promise<LookupResponse> {
+  const { data } = await http.post<LookupResponse>('/api/schedule/lookup', { query: query.trim() })
   return data
 }
 
-export function errorMessage(err: unknown): string {
+export type ErrorKind = 'rateLimited' | 'unavailable' | 'network'
+
+export function errorKind(err: unknown): ErrorKind {
   if (axios.isAxiosError(err)) {
-    if (err.response?.status === 429) return 'Too many tries — please wait a minute and try again.'
-    if (err.response?.status === 503) return 'The schedule is being updated. Please try again in a moment.'
-    if (err.response?.status === 422) return 'Please enter both your first and last name.'
+    if (err.response?.status === 429) return 'rateLimited'
+    if (err.response?.status === 503) return 'unavailable'
   }
-  return "We couldn't reach TUMO right now. Check your connection and try again."
+  return 'network'
 }

@@ -1,13 +1,18 @@
 """Turns raw spreadsheet rows into a clean, whitelisted Snapshot.
 
-Expected tabs (header row first; header matching is case/space-insensitive):
+Expected tab "Learners" (header row first; header matching is case/space-insensitive):
 
-  Students:  first_name | last_name | status | self_study_days | self_study_time | workshops | whatsapp_link
-  Workshops: id | name | teacher | room | days | time | whatsapp_link
-  Links:     key | value          (e.g. whatsapp_default -> https://chat.whatsapp.com/...)
+  full_name | schedule | self_study_day | coach | coach_email | stage | status | note | active
 
-`workshops` on a student row is a comma-separated list of Workshop ids (or names).
-`status` is "active" unless it says inactive/no/0/false/left/paused.
+Optional Kazakh overrides: schedule_kk | self_study_day_kk | note_kk
+(without them, the frontend translates weekday names automatically).
+
+- `status`: a status code or its Russian label, e.g. "Коуч без изменений", "График изменен",
+  "Коуч изменен", "В обработке". Unknown text is shown as-is.
+- `stage`: "Самообучение" / "Воркшоп" / "Проект" (or self_study / workshop / project).
+- `active`: blank means active; "нет" / "no" / "0" / "false" / "inactive" hides the schedule.
+
+Any other column (e.g. an IIN or phone column added by mistake) is ignored and never cached.
 """
 
 from __future__ import annotations
@@ -17,37 +22,49 @@ import unicodedata
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
-from .models import Snapshot, StudentRecord, Workshop
+from .models import LearnerRecord, Snapshot
 
-STUDENTS_TAB = "Students"
-WORKSHOPS_TAB = "Workshops"
-LINKS_TAB = "Links"
-TABS = (STUDENTS_TAB, WORKSHOPS_TAB, LINKS_TAB)
+LEARNERS_TAB = "Learners"
+TABS = (LEARNERS_TAB,)
 
 RawTabs = dict[str, list[dict[str, Any]]]
 
-# Header aliases -> canonical field. Only these fields are ever read; every other column is ignored.
-_STUDENT_FIELDS = {
-    "first_name": ("first_name", "firstname", "first", "name", "имя", "аты"),
-    "last_name": ("last_name", "lastname", "last", "surname", "фамилия", "тегі"),
-    "status": ("status", "active", "статус"),
-    "self_study_days": ("self_study_days", "self_study_day", "selfstudy_days", "self_study"),
-    "self_study_time": ("self_study_time", "selfstudy_time"),
-    "workshops": ("workshops", "workshop", "workshop_ids", "workshop_id"),
-    "whatsapp_link": ("whatsapp_link", "whatsapp", "whatsapp_group"),
+# Header aliases -> canonical field. Only these fields are ever read.
+_FIELDS = {
+    "full_name": ("full_name", "fullname", "name", "фио", "аты_жөні", "учащийся"),
+    "schedule": ("schedule", "график", "график_обучения"),
+    "schedule_kk": ("schedule_kk", "график_kk", "кесте"),
+    "self_study_day": ("self_study_day", "self_study", "день_самообучения", "основной_день_самообучения"),
+    "self_study_day_kk": ("self_study_day_kk",),
+    "coach": ("coach", "коуч"),
+    "coach_email": ("coach_email", "email_коуча", "email"),
+    "stage": ("stage", "этап", "этап_обучения"),
+    "status": ("status", "статус"),
+    "note": ("note", "комментарий", "примечание"),
+    "note_kk": ("note_kk",),
+    "active": ("active", "активен"),
 }
-_WORKSHOP_FIELDS = {
-    "id": ("id", "workshop_id", "code"),
-    "name": ("name", "workshop", "workshop_name", "title"),
-    "teacher": ("teacher", "coach", "instructor"),
-    "room": ("room", "location", "lab"),
-    "days": ("days", "day"),
-    "time": ("time", "hours"),
-    "whatsapp_link": ("whatsapp_link", "whatsapp", "whatsapp_group"),
-}
-_LINK_FIELDS = {"key": ("key", "name"), "value": ("value", "url", "link")}
 
-_INACTIVE = {"inactive", "no", "0", "false", "left", "paused", "archived", "неактивен"}
+_INACTIVE = {"no", "нет", "жоқ", "0", "false", "inactive", "неактивен", "archived", "left"}
+
+# Status label (normalized) -> code. Codes are translated in the frontend.
+_STATUS_CODES = {
+    "coach_unchanged": ("coach_unchanged", "коуч без изменений", "коуч остался прежним"),
+    "coach_changed": ("coach_changed", "коуч изменен", "коуч изменён", "новый коуч", "смена коуча"),
+    "schedule_changed": ("schedule_changed", "график изменен", "график изменён", "расписание изменено"),
+    "unchanged": ("unchanged", "без изменений", "график без изменений"),
+    "pending": ("pending", "в обработке", "заявка в обработке", "на рассмотрении"),
+}
+_STAGE_CODES = {
+    "self_study": ("self_study", "самообучение", "өзіндік оқу"),
+    "workshop": ("workshop", "воркшоп", "workshops"),
+    "project": ("project", "проект", "проекты", "project lab"),
+}
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+# Kazakh-specific letters folded to their closest Russian letter, so "нуртас" matches "Нұртас".
+_KK_FOLD = str.maketrans({"ә": "а", "ғ": "г", "қ": "к", "ң": "н", "ө": "о", "ұ": "у", "ү": "у", "һ": "х", "і": "и"})
 
 
 def _header_key(h: str) -> str:
@@ -64,84 +81,65 @@ def _pick(row: dict[str, Any], fields: dict[str, tuple[str, ...]]) -> dict[str, 
     return out
 
 
-def normalize_name(name: str) -> str:
-    """Normalize a person's name into an order-insensitive lookup key.
+def name_tokens(name: str) -> list[str]:
+    """Normalize a name into comparable tokens.
 
-    "  Aruzhan   SMAGULOVA " == "smagulova aruzhan"; ё/е and diacritics are folded.
+    Case-insensitive; folds Kazakh letters (ұ→у, қ→к, ...), ё→е, й→и and Latin diacritics.
+    Both the sheet and the query go through this, so matching stays consistent.
     """
-    # NFKD splits accented letters (é, ё, й) into base + combining mark; dropping the marks
-    # folds them. Both the sheet and the query go through this, so matching stays consistent.
-    s = unicodedata.normalize("NFKD", name).casefold()
+    s = name.casefold().translate(_KK_FOLD)
+    s = unicodedata.normalize("NFKD", s)
     s = "".join(ch for ch in s if not unicodedata.combining(ch))
-    tokens = re.findall(r"\w+", s)
-    return " ".join(sorted(tokens))
+    return re.findall(r"\w+", s)
 
 
-def _split_list(value: str) -> list[str]:
-    return [p.strip() for p in re.split(r"[,;\n]", value) if p.strip()]
+def matches(query_tokens: list[str], record_tokens: list[str]) -> bool:
+    """Every query token must be a prefix of a *different* name token (any order)."""
+    available = list(record_tokens)
+    for q in sorted(query_tokens, key=len, reverse=True):  # longest first avoids greedy mis-pairing
+        hit = next((i for i, t in enumerate(available) if t.startswith(q)), None)
+        if hit is None:
+            return False
+        available.pop(hit)
+    return True
 
 
-def _safe_url(value: str) -> str:
-    return value if value.lower().startswith(("https://", "http://")) else ""
+def _code(value: str, table: dict[str, tuple[str, ...]]) -> str:
+    v = " ".join(value.casefold().replace("ё", "е").split())
+    for code, labels in table.items():
+        if v in {label.replace("ё", "е") for label in labels}:
+            return code
+    return ""
 
 
 def parse_tabs(raw: RawTabs, source: str) -> Snapshot:
-    workshops: dict[str, Workshop] = {}
-    by_name: dict[str, str] = {}
-    for row in raw.get(WORKSHOPS_TAB, []):
-        w = _pick(row, _WORKSHOP_FIELDS)
-        wid = w["id"] or w["name"]
-        if not wid or not w["name"]:
+    learners: list[LearnerRecord] = []
+    for row in raw.get(LEARNERS_TAB, []):
+        r = _pick(row, _FIELDS)
+        tokens = name_tokens(r["full_name"])
+        if len(tokens) < 2:
             continue
-        workshops[wid.lower()] = Workshop(
-            id=wid,
-            name=w["name"],
-            teacher=w["teacher"],
-            room=w["room"],
-            days=w["days"],
-            time=w["time"],
-            whatsapp_link=_safe_url(w["whatsapp_link"]),
-        )
-        by_name[w["name"].lower()] = wid.lower()
-
-    students: list[StudentRecord] = []
-    for row in raw.get(STUDENTS_TAB, []):
-        s = _pick(row, _STUDENT_FIELDS)
-        if not s["first_name"] or not s["last_name"]:
-            continue
-        ids = []
-        for ref in _split_list(s["workshops"]):
-            key = ref.lower()
-            if key in workshops:
-                ids.append(key)
-            elif key in by_name:
-                ids.append(by_name[key])
-        students.append(
-            StudentRecord(
-                name_key=normalize_name(f"{s['first_name']} {s['last_name']}"),
-                first_name=s["first_name"],
-                last_name=s["last_name"],
-                active=s["status"].strip().lower() not in _INACTIVE,
-                self_study_days=s["self_study_days"],
-                self_study_time=s["self_study_time"],
-                workshop_ids=ids,
-                whatsapp_link=_safe_url(s["whatsapp_link"]),
+        email = r["coach_email"] if _EMAIL_RE.match(r["coach_email"]) else ""
+        learners.append(
+            LearnerRecord(
+                tokens=tokens,
+                full_name=" ".join(r["full_name"].split()),
+                active=r["active"].strip().lower() not in _INACTIVE,
+                schedule=r["schedule"],
+                schedule_kk=r["schedule_kk"],
+                self_study_day=r["self_study_day"],
+                self_study_day_kk=r["self_study_day_kk"],
+                coach=r["coach"],
+                coach_email=email,
+                stage=r["stage"],
+                stage_code=_code(r["stage"], _STAGE_CODES),
+                status=r["status"],
+                status_code=_code(r["status"], _STATUS_CODES),
+                note=r["note"],
+                note_kk=r["note_kk"],
             )
         )
-
-    links: dict[str, str] = {}
-    for row in raw.get(LINKS_TAB, []):
-        link = _pick(row, _LINK_FIELDS)
-        if link["key"] and link["value"]:
-            links[_header_key(link["key"])] = link["value"]
-
-    return Snapshot(
-        students=students,
-        workshops=workshops,
-        links=links,
-        fetched_at=datetime.now(timezone.utc),
-        source=source,
-    )
+    return Snapshot(learners=learners, fetched_at=datetime.now(timezone.utc), source=source)
 
 
 def rows_to_records(values: Iterable[list[Any]]) -> list[dict[str, Any]]:

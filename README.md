@@ -1,14 +1,14 @@
-# TUMO Astana: Student Dashboard
+# TUMO Astana: Learner Schedule Lookup
 
-A small, mobile-first app. Students type their name and see their personal TUMO schedule (self-study and workshops), a WhatsApp group link, and a short guide to how TUMO works.
+A single bilingual page (RU / ҚАЗ) where parents and learners type a learner's full name and see their current schedule, coach, learning stage, and the status of their schedule-change request. Below the search are an FAQ and the contact block.
 
 - **Backend:** Python + FastAPI. It reads a Google Sheet and keeps the data in an in-memory cache that is also saved to disk.
-- **Frontend:** Vue 3 + Vite + TypeScript + Tailwind CSS, with Vue Router and Axios.
-- **Data:** a Google Sheet that the team edits. No database to look after.
+- **Frontend:** Vue 3 + Vite + TypeScript + Tailwind CSS, with Axios. Translations use a small built-in helper (`src/i18n.ts`), not a library.
+- **Data:** one Google Sheet tab that the team edits. No database to look after.
 
 ```
 backend/   FastAPI app, mock data, tests
-frontend/  Vue 3 app (Home, Dashboard, Guide)
+frontend/  Vue 3 page: search + learner card, FAQ, support block
 Dockerfile one image that serves both the API and the built frontend
 ```
 
@@ -27,47 +27,52 @@ npm install
 npm run dev
 ```
 
-Names you can try from `backend/data/mock_sheet.json`:
+Searches you can try from `backend/data/mock_sheet.json` (all names are made up):
 
-| Name | Result |
+| Search | Result |
 |---|---|
-| Aruzhan Smagulova | dashboard with 1 workshop |
-| Daniyar Bekov | dashboard with 2 workshops |
-| аружан касымова | Cyrillic name, falls back to the default WhatsApp link |
-| Timur Akhmetov | "inactive" state |
-| anything else | "not found" state |
+| `нурлан айбар` | finds "Айбар Нұрлан Серікұлы", badge "Коуч без изменений" |
+| `асел толеген` | "График изменён", with the team's own note in RU and KK |
+| `тимур ахметов` / `мадина ержанова` | "Коуч изменён" / "Заявка в обработке" |
+| `данияр беков` | learner marked inactive |
+| `алия сер` | too vague (more than 3 matches), so nothing is shown |
+| `Айбар` | asks for both first name and surname |
 
-Lookup ignores case, extra spaces, accents, and word order, so "bekov daniyar" also works.
+### How name search works
 
-Run the tests with `cd backend && pytest`.
+`POST /api/schedule/lookup` with `{"query": "нуртас елмурат"}` finds "Елмұрат Нұртас Медеуұлы":
+
+- Matching ignores case, extra spaces, and word order.
+- Kazakh letters are matched to their Russian look-alikes (ұ→у, қ→к, ә→а, і→и, ...). ё matches е, and й matches и.
+- Each word you type must be the start of a *different* word in the name, so `нурт елму` also matches.
+- Privacy rules:
+  - At least two words of 2+ letters are required.
+  - If more than 3 learners match, the search returns nothing and asks for the full name.
+  - Lookups are rate-limited per IP.
+  - There is no autocomplete or name list, so the API can't be used to list learners.
 
 ## The Google Sheet
 
-Create one spreadsheet with **three tabs**. The tab names must match exactly. Put the headers in row 1; header matching ignores case and spaces.
+Create a tab named **`Learners`**. Put the headers in row 1; header matching ignores case and spaces, and Russian header names also work.
 
-**Students**
+| full_name | schedule | self_study_day | coach | coach_email | stage | status | note | active |
+|---|---|---|---|---|---|---|---|---|
+| Айбар Нұрлан Серікұлы | Вторник/Пятница 16:30-18:30 | Пятница | Aliya | coach@… | Самообучение | Коуч без изменений | *(optional)* | *(blank = active)* |
 
-| first_name | last_name | status | self_study_days | self_study_time | workshops | whatsapp_link |
-|---|---|---|---|---|---|---|
-| Aruzhan | Smagulova | active | Mon, Wed | 15:00–17:00 | ANIM-1 | *(optional)* |
+- **`status`:** shown as the badge, with a standard explanation underneath. Recognised values:
+  - `Коуч без изменений`
+  - `Коуч изменен`
+  - `График изменен`
+  - `Без изменений`
+  - `В обработке`
 
-- `status`: anything other than `inactive` / `no` / `0` / `false` / `left` / `paused` / `archived` counts as active.
-- `workshops`: workshop ids or names, separated by commas.
-- `whatsapp_link`: optional, for this student only. Without it, the app uses the workshop's link, then `whatsapp_default`.
+  Any other text is shown as typed, without an explanation.
+- **`stage`:** `Самообучение`, `Воркшоп` or `Проект` (other text is shown as typed).
+- **`note`:** a free-text note from the team, shown in a blue box. Add `note_kk` to give a Kazakh version.
+- **Kazakh schedule text:** in Kazakh mode, weekday names in `schedule` and `self_study_day` are translated automatically (Вторник → Сейсенбі). To write the Kazakh text yourself, add `schedule_kk` / `self_study_day_kk` columns.
+- **`active`:** `нет` / `no` / `0` hides the learner's schedule.
 
-**Workshops**
-
-| id | name | teacher | room | days | time | whatsapp_link |
-|---|---|---|---|---|---|---|
-| ANIM-1 | 2D Animation | Madina K. | Lab 2 | Tue, Fri | 16:00–18:00 | https://chat.whatsapp.com/… |
-
-**Links**
-
-| key | value |
-|---|---|
-| whatsapp_default | https://chat.whatsapp.com/… |
-
-To change a schedule, edit the row. The app picks up the change at the next sync (every 5 minutes by default).
+Any other column is ignored and never cached. Even so, **don't put IINs in the sheet**.
 
 ### Connecting the real sheet
 
@@ -86,22 +91,27 @@ To change a schedule, edit the row. The app picks up the change at the next sync
 - **Survives restarts.** Each good snapshot is written atomically to `data/cache/snapshot.json`. On startup this file loads first, so the app works straight away even if Google is down.
 - **Optional instant refresh.** Set `ADMIN_TOKEN`, then `curl -X POST -H "X-Admin-Token: …" /api/admin/refresh` to sync right after editing the sheet. This endpoint is disabled when no token is set.
 
+## Editing the page text
+
+- **All text:** `frontend/src/locales/ru.ts` and `kk.ts` hold every piece of text on the page, including the FAQ questions and answers. Add an FAQ entry to both files.
+- **Contacts:** the email, WhatsApp number, Instagram and website are in `frontend/src/config.ts`. The "написать в WhatsApp" button opens a chat with a pre-filled message that includes the name typed in the search box.
+
 ## Privacy
 
-- **Only allow-listed columns are kept.** Columns are allow-listed (see `backend/app/sheet.py`). Any other column, such as an IIN or phone number added by mistake, is dropped during parsing. It is never cached, saved to disk, or returned by the API. Even so, **don't put IINs in the sheet**.
-- **The API returns only what the dashboard shows:** first and last name, schedule, workshop name/teacher/room, and the WhatsApp link. There is no search-as-you-type or name listing, so the API can't be used to list students. Lookups are rate-limited per IP (`LOOKUP_RATE_LIMIT_PER_MINUTE`).
-- **Names stay out of URLs and logs.** The frontend uses `POST`, so names never appear in URLs or access logs. A `GET` variant exists for convenience. The result is kept in `sessionStorage` only, so it is gone when the tab closes.
+- **Only allow-listed columns are kept** (see `backend/app/sheet.py`). Any other column, such as an IIN or phone number added by mistake, is dropped during parsing.
+- **The API returns only what the card shows.**
+- **Names stay out of URLs and logs.** The search uses `POST`, and nothing about the learner is stored in the browser. Only the chosen language is remembered.
 
 ## Deploying
 
 The simplest option is one container, which serves both the API and the built frontend:
 
 ```bash
-docker build -t tumo-dashboard .
+docker build -t tumo-schedule .
 docker run -p 8000:8000 \
   -e DATA_SOURCE=google -e GOOGLE_SHEET_ID=… \
   -v $PWD/backend/credentials.json:/app/backend/credentials.json:ro \
-  tumo-dashboard
+  tumo-schedule
 ```
 
 Without Docker: run `npm run build` in `frontend/`, then run uvicorn in `backend/`. FastAPI serves `frontend/dist` automatically when it exists (`STATIC_DIR`).
