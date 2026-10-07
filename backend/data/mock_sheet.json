@@ -1,0 +1,19 @@
+{
+  "Students": [
+    {"first_name": "Aruzhan", "last_name": "Smagulova", "status": "active", "self_study_days": "Mon, Wed", "self_study_time": "15:00–17:00", "workshops": "ANIM-1", "whatsapp_link": ""},
+    {"first_name": "Daniyar", "last_name": "Bekov", "status": "active", "self_study_days": "Tue, Thu", "self_study_time": "10:00–12:00", "workshops": "PROG-1, MUSIC-1", "whatsapp_link": ""},
+    {"first_name": "Аружан", "last_name": "Касымова", "status": "active", "self_study_days": "Sat", "self_study_time": "12:00–14:00", "workshops": "GAME-1", "whatsapp_link": ""},
+    {"first_name": "Timur", "last_name": "Akhmetov", "status": "inactive", "self_study_days": "Fri", "self_study_time": "16:00–18:00", "workshops": "ROBO-1", "whatsapp_link": ""},
+    {"first_name": "Aigerim", "last_name": "Nurlanova", "status": "active", "self_study_days": "Mon, Thu", "self_study_time": "17:00–19:00", "workshops": "", "whatsapp_link": "https://chat.whatsapp.com/example-aigerim-group"}
+  ],
+  "Workshops": [
+    {"id": "ANIM-1", "name": "2D Animation", "teacher": "Madina K.", "room": "Lab 2", "days": "Tue, Fri", "time": "16:00–18:00", "whatsapp_link": "https://chat.whatsapp.com/example-animation"},
+    {"id": "PROG-1", "name": "Programming: Python Basics", "teacher": "Arman S.", "room": "Lab 1", "days": "Mon, Wed", "time": "14:00–16:00", "whatsapp_link": "https://chat.whatsapp.com/example-programming"},
+    {"id": "MUSIC-1", "name": "Music Production", "teacher": "Dana T.", "room": "Studio", "days": "Sat", "time": "11:00–13:00", "whatsapp_link": ""},
+    {"id": "GAME-1", "name": "Game Development", "teacher": "Yerlan B.", "room": "", "days": "Sun", "time": "12:00–14:00", "whatsapp_link": ""},
+    {"id": "ROBO-1", "name": "Robotics", "teacher": "Samat Zh.", "room": "Lab 3", "days": "Wed", "time": "15:00–17:00", "whatsapp_link": ""}
+  ],
+  "Links": [
+    {"key": "whatsapp_default", "value": "https://chat.whatsapp.com/example-tumo-astana"}
+  ]
+}

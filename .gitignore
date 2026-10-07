@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Secrets — never commit Google credentials
+credentials.json
+*service-account*.json
+.env
+
+# Runtime cache
+backend/data/cache/
+
+# Frontend
+node_modules/
+dist/
+*.local
