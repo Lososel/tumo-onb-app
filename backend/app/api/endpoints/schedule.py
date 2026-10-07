@@ -21,6 +21,21 @@ router = APIRouter(prefix="/api/schedule", tags=["schedule"])
 log = logging.getLogger(__name__)
 
 
+_proxy_shape_logged = False
+
+
+def _report_proxy_shape(entries: int, hops: int) -> None:
+    """Log once how many X-Forwarded-For entries arrive (never the addresses), so PROXY_HOPS can
+    be checked against the real proxy chain: a browser request should carry exactly PROXY_HOPS."""
+    global _proxy_shape_logged
+    if _proxy_shape_logged:
+        return
+    _proxy_shape_logged = True
+    level = logging.INFO if entries == hops else logging.WARNING
+    log.log(level, "First lookup: X-Forwarded-For has %d entr%s, PROXY_HOPS=%d%s", entries,
+            "y" if entries == 1 else "ies", hops, "" if entries == hops else " (check PROXY_HOPS)")
+
+
 def client_ip(request: Request) -> str:
     """Rate-limit key. Behind N proxies, each appends the address it received the request from,
     so the Nth entry from the right of X-Forwarded-For is the real client. Entries further left
@@ -28,6 +43,7 @@ def client_ip(request: Request) -> str:
     hops = request.app.state.settings.proxy_hops
     if hops:
         forwarded = [p.strip() for p in request.headers.get("x-forwarded-for", "").split(",") if p.strip()]
+        _report_proxy_shape(len(forwarded), hops)
         if len(forwarded) >= hops:
             return forwarded[-hops]
     return request.client.host if request.client else "unknown"

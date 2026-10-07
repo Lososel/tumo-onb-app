@@ -49,11 +49,15 @@ services:
       # TAB_FILTER (e.g. "4 поток" matches "4 поток" and "4 поток (лист ожидания)").
       - key: SYNC_INTERVAL_SECONDS
         value: "300"
-      # Anti-scraping: max lookups per visitor IP per minute (HTTP 429 beyond that).
+      # Anti-scraping: max lookups per visitor IP per minute (HTTP 429 beyond that). Everyone on
+      # the centre's Wi-Fi shares one public IP, so this is per room, not per student; the
+      # two-full-words rule already stops broad sweeps. (The code default is 5.)
       - key: LOOKUP_RATE_LIMIT_PER_MINUTE
-        value: "5"
+        value: "20"
       # Render's proxy appends the client IP to X-Forwarded-For; rate limiting uses that entry
       # instead of the proxy's address (otherwise all visitors would share one limit).
+      # Verify after deploy: the log line "First lookup: X-Forwarded-For has N entries" should
+      # show N = PROXY_HOPS; otherwise set PROXY_HOPS to N.
       - key: PROXY_HOPS
         value: "1"
       # Temporary passwords on the schedule card. Keep "false" outside onboarding: while "true",

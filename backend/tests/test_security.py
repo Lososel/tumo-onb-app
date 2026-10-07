@@ -187,3 +187,83 @@ def test_api_docs_disabled_by_default(make_client):
         assert c.get("/openapi.json").status_code == 404
     with make_client(enable_api_docs=True) as c:
         assert c.get("/openapi.json").status_code == 200
+
+
+# ---------- 5. limiter memory, proxy check, hostile workbooks ----------
+
+
+def test_limiter_memory_stays_bounded_under_ip_flood():
+    from app.core.rate_limit import RateLimiter
+
+    limiter = RateLimiter(5, max_keys=100)
+    for i in range(1_000):
+        limiter.check(f"10.0.{i // 256}.{i % 256}")
+    assert len(limiter._hits) <= 100
+    # The most recent clients are still counted after a prune.
+    for _ in range(4):
+        limiter.check("10.0.3.231")
+    with pytest.raises(Exception):
+        limiter.check("10.0.3.231")
+
+
+def test_limiter_forgets_idle_clients(monkeypatch):
+    from app.core import rate_limit
+
+    now = [1000.0]
+    monkeypatch.setattr(rate_limit.time, "monotonic", lambda: now[0])
+    limiter = rate_limit.RateLimiter(5, max_keys=10)
+    for i in range(10):
+        limiter.check(f"old-{i}")
+    now[0] += 61
+    limiter.check("new")  # 11th key triggers a prune: every idle client is dropped
+    assert set(limiter._hits) == {"new"}
+
+
+def test_proxy_hops_mismatch_is_logged_once_without_addresses(make_client, caplog, monkeypatch):
+    from app.api.endpoints import schedule
+
+    monkeypatch.setattr(schedule, "_proxy_shape_logged", False)
+    with make_client(proxy_hops=1) as c, caplog.at_level("INFO"):
+        lookup(c, "Иванова Анна", **{"X-Forwarded-For": "198.51.100.7, 203.0.113.9"})
+        lookup(c, "Иванова Анна", **{"X-Forwarded-For": "198.51.100.7"})
+    lines = [r.getMessage() for r in caplog.records if "X-Forwarded-For" in r.getMessage()]
+    assert lines == ["First lookup: X-Forwarded-For has 2 entries, PROXY_HOPS=1 (check PROXY_HOPS)"]
+    assert "198.51.100.7" not in caplog.text and "203.0.113.9" not in caplog.text
+
+
+def test_xml_bomb_workbook_is_rejected_not_expanded():
+    import io
+    import zipfile
+
+    import openpyxl
+    from openpyxl.xml import DEFUSEDXML
+
+    from app.services.sheets import SheetsConfigError, xlsx_to_tabs
+
+    assert DEFUSEDXML, "defusedxml must be installed so openpyxl refuses entity expansion"
+    wb = openpyxl.Workbook()
+    wb.active["A1"] = "x"
+    buf = io.BytesIO()
+    wb.save(buf)
+    entities = "".join(f'<!ENTITY {n} "{("&" + p + ";") * 10}">' for p, n in zip("abcdefgh", "bcdefghi"))
+    sheet = (
+        '<?xml version="1.0"?>{doctype}'
+        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+        '<row r="1"><c r="A1" t="inlineStr"><is><t>{text}</t></is></c></row></sheetData></worksheet>'
+    )
+
+    def workbook(sheet_xml: str) -> bytes:
+        src, out = zipfile.ZipFile(io.BytesIO(buf.getvalue())), io.BytesIO()
+        with zipfile.ZipFile(out, "w") as z:
+            for item in src.namelist():
+                z.writestr(item, sheet_xml if item == "xl/worksheets/sheet1.xml" else src.read(item))
+        return out.getvalue()
+
+    # Control: the same hand-built sheet without entities reads fine.
+    plain = workbook(sheet.format(doctype="", text="Иванова Анна"))
+    assert xlsx_to_tabs(plain) == {"Sheet": [["Иванова Анна"]]}
+    # The bomb (one cell expanding to a billion characters) is refused before any expansion; the
+    # store records the failed sync and keeps serving the last good snapshot.
+    bomb = sheet.format(doctype=f'<!DOCTYPE x [<!ENTITY a "aaaaaaaaaa">{entities}]>', text="&i;")
+    with pytest.raises(SheetsConfigError):
+        xlsx_to_tabs(workbook(bomb))

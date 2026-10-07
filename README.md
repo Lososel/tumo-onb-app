@@ -126,8 +126,9 @@ Export each tab with *File → Download → CSV* and put the files in `backend/d
 ## Security
 
 - **Anti-scraping:**
-  - at most **5 lookups per minute per visitor IP** (`LOOKUP_RATE_LIMIT_PER_MINUTE`), then HTTP 429 *"Too Many Requests. Please wait a minute before searching again."* with a `Retry-After` header;
-  - each visitor is counted separately behind Render's proxy (`PROXY_HOPS`);
+  - at most **5 lookups per minute per visitor IP** by default (`LOOKUP_RATE_LIMIT_PER_MINUTE`; `render.yaml` sets 20, because everyone on the centre's Wi-Fi shares one public IP), then HTTP 429 *"Too Many Requests. Please wait a minute before searching again."* with a `Retry-After` header;
+  - each visitor is counted separately behind Render's proxy (`PROXY_HOPS`); the limiter's memory stays bounded even when flooded from many IPs;
+  - Drive `.xlsx` files are parsed with `defusedxml` active, so a crafted workbook (XML bomb) is rejected instead of exhausting memory;
   - queries need **two words of at least 3 letters**;
   - more than 3 matches reveal nothing.
 - **Response fields:** only the card fields are returned. Student emails are shown only on `@tumo.world` (`STUDENT_EMAIL_DOMAINS`). Personal and parent columns are dropped while the sheet is read.
@@ -159,7 +160,7 @@ Export each tab with *File → Download → CSV* and put the files in `backend/d
 
 Notes:
 - **`plan: free` sleeps after ~15 minutes idle.** The first visitor then waits for a cold start, and sheet syncing pauses while asleep. Switch to `starter` for always-on.
-- **`PROXY_HOPS=1`** makes rate limiting use the client IP that Render's proxy appends to `X-Forwarded-For`. Without it, every visitor would share one limit. After the first deploy, check that one visitor hitting the limit doesn't block others.
+- **`PROXY_HOPS=1`** makes rate limiting use the client IP that Render's proxy appends to `X-Forwarded-For`. Without it, every visitor would share one limit. After the first deploy, look for the log line `First lookup: X-Forwarded-For has N entries, PROXY_HOPS=1`: if N isn't 1, set `PROXY_HOPS` to N. The line shows only the count, never the addresses.
 - **`EXPOSE_TEMP_PASSWORD` is `false`.** Change it in the Environment tab for onboarding week only.
 
 **Credentials:** instead of the secret file, you can paste the whole service-account JSON into `GOOGLE_CREDENTIALS_JSON`; it takes priority when set. Escaped `\n` in the private key and line breaks pasted inside the JSON are both handled.
