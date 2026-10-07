@@ -2,6 +2,7 @@
 import { computed, ref, useId, watch } from 'vue'
 import { PENDING, type Learner } from '../api'
 import { localized, t } from '../i18n'
+import { communityFor } from '../whatsapp'
 
 const props = defineProps<{ learner: Learner }>()
 
@@ -23,6 +24,11 @@ const statusNote = computed(() => {
   const code = props.learner.status_code
   return code !== 'other' ? t.value.statusNote[code] : ''
 })
+
+// WhatsApp community for the learner's slot. Hidden on the waitlist: they don't have that slot yet.
+const community = computed(() =>
+  props.learner.status_code === 'waitlist' ? null : communityFor(props.learner.schedule),
+)
 
 // The API's "Уточняется" placeholder becomes null here so it renders as the localized t.card.notSet.
 const known = (v: string | null) => (v === PENDING ? null : v)
@@ -109,5 +115,36 @@ async function copyPassword() {
     <p v-if="statusNote" class="mt-6 rounded-2xl bg-sky-50 px-5 py-3.5 text-[0.95rem] text-slate-700">
       {{ statusNote }}
     </p>
+
+    <div
+      v-if="community"
+      class="mt-6 flex flex-col items-start gap-4 rounded-2xl border-2 border-dashed border-brand-400 p-4 sm:flex-row sm:items-center sm:gap-6 sm:p-5"
+    >
+      <img
+        :src="`/whatsapp/${community.key}.svg`"
+        :alt="t.card.whatsapp.qrAlt"
+        width="120"
+        height="120"
+        class="h-28 w-28 shrink-0 rounded-lg bg-white sm:h-32 sm:w-32"
+      />
+      <div class="min-w-0">
+        <p class="font-display text-lg leading-snug font-black text-ink">
+          {{ t.card.whatsapp.title }}:
+          <span class="whitespace-nowrap">{{ t.card.whatsapp.days[community.days] }} {{ community.start }}–{{ community.end }}</span>
+        </p>
+        <a
+          :href="community.url"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="mt-1 block text-sm break-all text-brand-500 hover:underline sm:text-base"
+        >{{ community.url }}</a>
+        <a
+          :href="community.url"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="mt-3 inline-flex rounded-full bg-[#5bc96f] px-6 py-2.5 font-bold text-white transition hover:bg-[#49b95d]"
+        >{{ t.card.whatsapp.join }}</a>
+      </div>
+    </div>
   </article>
 </template>
