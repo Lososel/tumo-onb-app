@@ -17,7 +17,7 @@ import SectionTitle from './SectionTitle.vue'
             aria-hidden="true"
           >+</span>
         </summary>
-        <p class="px-1 pb-6 leading-relaxed text-slate-600">{{ item.a }}</p>
+        <p class="px-1 pb-6 leading-relaxed whitespace-pre-line text-slate-600">{{ item.a }}</p>
       </details>
     </div>
   </section>
