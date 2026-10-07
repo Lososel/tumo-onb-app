@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .models import LearnerRecord, Snapshot
-from .sheet import matches, parse_tabs
+from .services.sheets import matches, parse_tabs
 from .sources import DataSource
 
 log = logging.getLogger(__name__)
@@ -69,7 +69,11 @@ class LearnerStore:
         try:
             self.cache_file.parent.mkdir(parents=True, exist_ok=True)
             tmp = self.cache_file.with_suffix(".tmp")
-            tmp.write_text(snapshot.model_dump_json(), encoding="utf-8")
+            # The snapshot can hold temporary passwords: owner-only permissions from the first byte.
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(snapshot.model_dump_json())
+            os.chmod(tmp, 0o600)  # in case a stale .tmp existed with wider permissions
             os.replace(tmp, self.cache_file)  # atomic: never leaves a half-written cache
         except Exception:
             log.exception("Could not persist snapshot to %s", self.cache_file)

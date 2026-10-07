@@ -1,19 +1,19 @@
 import axios from 'axios'
 
+export type StatusCode = 'active_schedule' | 'schedule_pending' | 'schedule_changed' | 'coach_changed'
+
+/** One learner's schedule card, as returned by POST /api/schedule/lookup. */
 export interface Learner {
   full_name: string
   schedule: string | null
-  schedule_kk: string | null
-  self_study_day: string | null
-  self_study_day_kk: string | null
-  coach: string | null
-  coach_email: string | null
-  stage: string | null
-  stage_code: 'self_study' | 'workshop' | 'project' | null
+  coach_name: string | null
+  room: string | null
+  default_email: string | null
+  /** null unless the backend has EXPOSE_TEMP_PASSWORD enabled */
+  temp_password: string | null
+  status_code: StatusCode | 'other'
+  /** raw sheet text, shown as the badge when status_code is 'other' */
   status: string | null
-  status_code: 'coach_unchanged' | 'coach_changed' | 'schedule_changed' | 'unchanged' | 'pending' | null
-  note: string | null
-  note_kk: string | null
 }
 
 export type LookupStatus = 'ok' | 'not_found' | 'inactive' | 'need_full_name' | 'too_many'

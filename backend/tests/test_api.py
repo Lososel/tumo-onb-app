@@ -1,13 +1,16 @@
 import json
+import stat
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.config import BACKEND_DIR, Settings
+from app.core.config import BACKEND_DIR, Settings
 from app.main import create_app
-from app.sheet import matches, name_tokens, parse_tabs
 
 MOCK = BACKEND_DIR / "data" / "mock_sheet.json"
+CARD_FIELDS = {
+    "full_name", "schedule", "coach_name", "room", "default_email", "temp_password", "status_code", "status",
+}
 
 
 @pytest.fixture
@@ -23,63 +26,105 @@ def lookup(c, query):
     return c.post("/api/schedule/lookup", json={"query": query}).json()
 
 
-@pytest.mark.parametrize(
-    "query",
-    ["нуртас елмурат", "Елмұрат Нұртас", "ЕЛМУРАТ НУРТАС МЕДЕУУЛЫ", "нурт елму", "Елмурат  Нуртас"],
-)
-def test_matching_is_case_kazakh_order_and_prefix_insensitive(query):
-    assert matches(name_tokens(query), name_tokens("Елмұрат Нұртас Медеуұлы"))
-
-
-@pytest.mark.parametrize("query", ["нуртас нуртас", "нуртас иван", "ртас елмурат"])
-def test_matching_rejects(query):
-    assert not matches(name_tokens(query), name_tokens("Елмұрат Нұртас Медеуұлы"))
-
-
-def test_lookup_found(make_client):
+def test_lookup_returns_schedule_card(make_client):
     with make_client() as c:
         body = lookup(c, "нурлан айбар")
-        assert body["status"] == "ok"
-        r = body["results"][0]
-        assert r["full_name"] == "Айбар Нұрлан Серікұлы"
-        assert r["schedule"] == "Вторник/Пятница 16:30-18:30"
-        assert r["self_study_day"] == "Пятница"
-        assert r["coach"] == "Aliya" and r["coach_email"] == "coach.aliya@example.com"
-        assert r["stage_code"] == "self_study" and r["status_code"] == "coach_unchanged"
-        assert r["note"] is None
+        assert body["status"] == "ok" and len(body["results"]) == 1
+        card = body["results"][0]
+        assert set(card) == CARD_FIELDS
+        assert card == {
+            "full_name": "Айбар Нұрлан Серікұлы",
+            "schedule": "Вторник/Пятница 16:30-18:30",
+            "coach_name": "Aliya",
+            "room": "Lab 2",
+            "default_email": "aibar.nurlan@example.com",
+            "temp_password": None,  # EXPOSE_TEMP_PASSWORD defaults to off
+            "status_code": "active_schedule",
+            "status": None,
+        }
 
 
-def test_status_codes_and_kk_note(make_client):
+def test_all_tabs_are_searched(make_client):
     with make_client() as c:
-        r = lookup(c, "асел толеген")["results"][0]
-        assert r["status_code"] == "schedule_changed" and r["stage_code"] == "workshop"
-        assert r["note_kk"].startswith("Жаңа")
-        assert lookup(c, "тимур ахметов")["results"][0]["status_code"] == "coach_changed"
-        assert lookup(c, "мадина ержанова")["results"][0]["status_code"] == "pending"
+        assert lookup(c, "асел толеген")["results"][0]["room"] == "Lab 1"  # tab "Поток 1", ru headers
+        timur = lookup(c, "тимур ахметов")["results"][0]  # tab "Batch 2", en headers, other order
+        assert (timur["coach_name"], timur["status_code"]) == ("Arman", "schedule_changed")
+        assert lookup(c, "алия серикова")["results"][0]["room"] == "Lab 1"  # header-less tab
+        pending = lookup(c, "мадина ержанова")["results"][0]
+        assert pending["status_code"] == "schedule_pending" and pending["schedule"] is None
 
 
-def test_lookup_states(make_client):
+def test_duplicate_row_in_other_tab_is_ignored(make_client):
+    with make_client() as c:
+        results = lookup(c, "айбар нурлан")["results"]
+        assert len(results) == 1 and results[0]["room"] == "Lab 2"
+
+
+def test_lookup_states_and_result_cap(make_client):
     with make_client() as c:
         assert lookup(c, "Айбар")["status"] == "need_full_name"
         assert lookup(c, "а б")["status"] == "need_full_name"
         assert lookup(c, "Иван Иванов")["status"] == "not_found"
         assert lookup(c, "данияр беков")["status"] == "inactive"
-        assert lookup(c, "алия сер")["status"] == "too_many"  # vague query reveals nothing
-        assert lookup(c, "алия серикова")["status"] == "ok"
+        vague = lookup(c, "алия сер")  # 4 matches > cap of 3: nothing revealed
+        assert vague["status"] == "too_many" and vague["results"] == []
+        assert lookup(c, "алия серик")["status"] == "too_many"
         assert c.post("/api/schedule/lookup", json={"query": ""}).status_code == 422
 
 
-def test_unknown_columns_are_never_kept():
-    raw = {"Learners": [{"ФИО": "Иван Петров", "IIN": "000000000000", "Phone": "+77001234567", "Коуч": "X"}]}
-    snap = parse_tabs(raw, source="test")
-    dumped = snap.model_dump_json()
-    assert "000000000000" not in dumped and "+77001234567" not in dumped
-    assert snap.learners[0].coach == "X"
+def test_up_to_three_matches_are_returned(make_client, tmp_path):
+    header = ["ФИО", "Расписание"]
+    sheet = tmp_path / "sheet.json"
+    sheet.write_text(json.dumps({"T": [header] + [[f"Иван Петров{s}", "Пн"] for s in ("", "ич", "ский")]}))
+    with make_client(mock_file=sheet) as c:
+        body = lookup(c, "иван петров")
+        assert body["status"] == "ok" and len(body["results"]) == 3
 
 
-def test_bad_email_dropped():
-    raw = {"Learners": [{"full_name": "Иван Петров", "coach_email": "not-an-email"}]}
-    assert parse_tabs(raw, source="test").learners[0].coach_email == ""
+def test_temp_password_hidden_by_default(make_client):
+    with make_client() as c:
+        body = lookup(c, "нурлан айбар")
+        assert body["results"][0]["temp_password"] is None
+        assert "Tumo-4821" not in json.dumps(body)
+
+
+def test_temp_password_shown_when_enabled(make_client):
+    with make_client(expose_temp_password=True) as c:
+        assert lookup(c, "нурлан айбар")["results"][0]["temp_password"] == "Tumo-4821"
+
+
+def test_expose_temp_password_env_parsing(monkeypatch):
+    for value, expected in [("true", True), ("1", True), ("false", False), ("0", False), ("", False)]:
+        monkeypatch.setenv("EXPOSE_TEMP_PASSWORD", value)
+        assert Settings.from_env().expose_temp_password is expected
+    monkeypatch.delenv("EXPOSE_TEMP_PASSWORD")
+    assert Settings.from_env().expose_temp_password is False
+
+
+def test_tumo_id_and_iin_never_in_responses(make_client, tmp_path):
+    sheet = tmp_path / "sheet.json"
+    sheet.write_text(
+        json.dumps(
+            {
+                "T": [
+                    ["ФИО", "Расписание", "TUMO ID", "ИИН", "Email коуча", "Пароль"],
+                    ["Иван Петров", "Пн", "AST-9999", "000000000000", "c@example.com", "P-1"],
+                ]
+            }
+        )
+    )
+    with make_client(mock_file=sheet, expose_temp_password=True) as c:
+        raw = c.post("/api/schedule/lookup", json={"query": "иван петров"}).text
+        assert "AST-9999" not in raw and "000000000000" not in raw
+        assert "c@example.com" not in raw  # extra_info stays server-side
+        assert set(json.loads(raw)["results"][0]) == CARD_FIELDS
+
+
+def test_cache_file_is_owner_only(make_client, tmp_path):
+    with make_client():
+        pass
+    mode = stat.S_IMODE((tmp_path / "snapshot.json").stat().st_mode)
+    assert mode == 0o600
 
 
 def test_falls_back_to_cache_when_source_fails(make_client, tmp_path):
@@ -96,7 +141,6 @@ def test_falls_back_to_cache_when_source_fails(make_client, tmp_path):
     with make_client(mock_file=sheet) as c:
         assert c.get("/api/health").json()["learners_cached"] == 9
         assert lookup(c, "нурлан айбар")["status"] == "ok"
-    assert json.loads((tmp_path / "snapshot.json").read_text())["learners"][0]["coach"] == "Aliya"
 
 
 def test_no_data_returns_503(make_client, tmp_path):

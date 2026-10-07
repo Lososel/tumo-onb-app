@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { errorKind, lookupSchedule, type ErrorKind, type LookupResponse } from '../api'
 import { format, t } from '../i18n'
-import LearnerCard from './LearnerCard.vue'
+import ScheduleCard from './ScheduleCard.vue'
 import SectionTitle from './SectionTitle.vue'
 
 const query = defineModel<string>({ default: '' })
@@ -96,7 +96,7 @@ const updatedAt = computed(() => {
         {{ message }}
       </p>
       <template v-if="result?.status === 'ok'">
-        <LearnerCard v-for="(l, i) in result.results" :key="i" :learner="l" />
+        <ScheduleCard v-for="(l, i) in result.results" :key="i" :learner="l" />
         <p v-if="updatedAt" class="text-center text-sm text-slate-400">{{ updatedAt }}</p>
       </template>
     </div>

@@ -6,7 +6,9 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-BACKEND_DIR = Path(__file__).resolve().parent.parent
+BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+
+_FALSE = {"0", "false", "no", "off", ""}
 
 
 def _load_dotenv(path: Path) -> None:
@@ -38,6 +40,9 @@ class Settings:
     lookup_rate_limit_per_minute: int = 30
     admin_token: str = ""  # enables POST /api/admin/refresh when set
     static_dir: Path | None = None  # built frontend to serve (optional)
+    # EXPOSE_TEMP_PASSWORD: include the sheet's temporary password in lookup responses.
+    # Off unless explicitly enabled; turn it off again once onboarding is over.
+    expose_temp_password: bool = False
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -56,4 +61,5 @@ class Settings:
             lookup_rate_limit_per_minute=int(env("LOOKUP_RATE_LIMIT_PER_MINUTE", "30")),
             admin_token=env("ADMIN_TOKEN", "").strip(),
             static_dir=_resolve(env("STATIC_DIR", "../frontend/dist")),
+            expose_temp_password=env("EXPOSE_TEMP_PASSWORD", "false").strip().lower() not in _FALSE,
         )

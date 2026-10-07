@@ -1,13 +1,26 @@
 {
-  "Learners": [
-    {"full_name": "Айбар Нұрлан Серікұлы", "schedule": "Вторник/Пятница 16:30-18:30", "self_study_day": "Пятница", "coach": "Aliya", "coach_email": "coach.aliya@example.com", "stage": "Самообучение", "status": "Коуч без изменений", "note": "", "active": ""},
-    {"full_name": "Әсел Қайратқызы Төлеген", "schedule": "Понедельник/Среда 14:00-16:00", "self_study_day": "Среда", "coach": "Dana", "coach_email": "coach.dana@example.com", "stage": "Воркшоп", "status": "График изменен", "note": "Новое время действует со следующей недели.", "note_kk": "Жаңа уақыт келесі аптадан бастап күшіне енеді.", "active": ""},
-    {"full_name": "Тимур Ахметов", "schedule": "Суббота 11:00-13:00", "self_study_day": "Суббота", "coach": "Arman", "coach_email": "coach.arman@example.com", "stage": "Проект", "status": "Коуч изменен", "note": "", "active": ""},
-    {"full_name": "Мадина Ержанова", "schedule": "", "self_study_day": "", "coach": "", "coach_email": "", "stage": "", "status": "В обработке", "note": "", "active": ""},
-    {"full_name": "Данияр Беков", "schedule": "Четверг 15:00-17:00", "self_study_day": "Четверг", "coach": "Samat", "coach_email": "coach.samat@example.com", "stage": "Самообучение", "status": "Без изменений", "note": "", "active": "нет"},
-    {"full_name": "Алия Серикова", "schedule": "Вторник/Четверг 10:00-12:00", "self_study_day": "Вторник", "coach": "Aliya", "coach_email": "coach.aliya@example.com", "stage": "Самообучение", "status": "Коуч без изменений", "note": "", "active": ""},
-    {"full_name": "Алия Серикбаева", "schedule": "Среда/Пятница 15:00-17:00", "self_study_day": "Среда", "coach": "Dana", "coach_email": "coach.dana@example.com", "stage": "Воркшоп", "status": "Коуч без изменений", "note": "", "active": ""},
-    {"full_name": "Алия Серикжанова", "schedule": "Суббота 10:00-12:00", "self_study_day": "Суббота", "coach": "Arman", "coach_email": "coach.arman@example.com", "stage": "Самообучение", "status": "Коуч без изменений", "note": "", "active": ""},
-    {"full_name": "Алия Серикпаева", "schedule": "Воскресенье 12:00-14:00", "self_study_day": "Воскресенье", "coach": "Samat", "coach_email": "coach.samat@example.com", "stage": "Самообучение", "status": "Коуч без изменений", "note": "", "active": ""}
+  "Поток 1 (Вт/Пт)": [
+    ["TUMO Astana — поток 1, осень 2026"],
+    [],
+    ["№", "ФИО ученика", "Расписание", "Коуч", "Кабинет", "Почта", "Временный пароль", "TUMO ID", "Email коуча"],
+    ["1", "Айбар Нұрлан Серікұлы", "Вторник/Пятница 16:30-18:30", "Aliya", "Lab 2", "aibar.nurlan@example.com", "Tumo-4821", "AST-0001", "coach.aliya@example.com"],
+    ["2", "Әсел Қайратқызы Төлеген", "Вторник/Пятница 14:00-16:00", "Dana", "Lab 1", "asel.tolegen@example.com", "Tumo-7310", "AST-0002", "coach.dana@example.com"],
+    ["3", "Мадина  Ержанова", "", "", "", "madina.yerzhanova@example.com", "Tumo-5592", "AST-0003", ""]
+  ],
+  "Batch 2": [
+    ["Full Name", "TUMO ID", "Room", "Coach", "Schedule", "Email", "Password", "Status"],
+    ["Тимур Ахметов", "AST-0101", "Lab 3", "Arman", "Суббота 11:00-13:00", "timur.akhmetov@example.com", "Tumo-1188", "График изменен"],
+    ["Данияр Беков", "AST-0102", "Lab 3", "Samat", "Четверг 15:00-17:00", "daniyar.bekov@example.com", "Tumo-2043", "Неактивен"],
+    ["Айбар Нұрлан Серікұлы", "AST-0001", "Lab 9", "Someone Else", "Duplicate row", "dup@example.com", "Tumo-0000", ""]
+  ],
+  "Поток 3": [
+    ["Алия Серикова", "Понедельник/Среда 10:00-12:00", "Aliya", "Lab 1", "aliya.serikova@example.com", "Tumo-3301", "AST-0201"],
+    ["Алия Серикбаева", "Понедельник/Среда 12:00-14:00", "Dana", "Lab 2", "aliya.serikbayeva@example.com", "Tumo-3302", "AST-0202"],
+    ["Алия Серикжанова", "Суббота 10:00-12:00", "Arman", "Lab 3", "aliya.serikzhanova@example.com", "Tumo-3303", "AST-0203"],
+    ["Алия Серикпаева", "Воскресенье 12:00-14:00", "Samat", "Studio", "aliya.serikpayeva@example.com", "Tumo-3304", "AST-0204"]
+  ],
+  "Заметки": [
+    ["Напоминание: обновить расписание до пятницы"],
+    ["Новые кабинеты: Lab 1–3, Studio"]
   ]
 }

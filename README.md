@@ -1,14 +1,21 @@
 # TUMO Astana: Learner Schedule Lookup
 
-A single bilingual page (RU / ҚАЗ) where parents and learners type a learner's full name and see their current schedule, coach, learning stage, and the status of their schedule-change request. Below the search are an FAQ and the contact block.
+A single bilingual page (RU / ҚАЗ) where parents and learners type a learner's full name and see their schedule card: schedule, coach, room, TUMO email, a status badge, and optionally the temporary first-login password. Below the search are an FAQ and the contact block.
 
-- **Backend:** Python + FastAPI. It reads a Google Sheet and keeps the data in an in-memory cache that is also saved to disk.
+- **Backend:** Python + FastAPI. It reads every tab of a Google Sheet and keeps the data in an in-memory cache that is also saved to disk.
 - **Frontend:** Vue 3 + Vite + TypeScript + Tailwind CSS, with Axios. Translations use a small built-in helper (`src/i18n.ts`), not a library.
-- **Data:** one Google Sheet tab that the team edits. No database to look after.
+- **Data:** a Google Sheet that the team edits, with any number of tabs. No database to look after.
 
 ```
-backend/   FastAPI app, mock data, tests
-frontend/  Vue 3 page: search + learner card, FAQ, support block
+backend/
+  app/main.py                  app factory: health, admin refresh, serves the built frontend
+  app/api/endpoints/schedule.py  POST /api/schedule/lookup
+  app/schemas/schedule.py      public response shapes (the only data sent to browsers)
+  app/services/sheets.py       dynamic multi-tab sheet parser
+  app/core/config.py           settings (env vars / .env)
+  app/store.py, app/sources.py cache + background sync, mock / Google Sheets sources
+  data/mock_sheet.json         sample sheet (made-up data)
+frontend/  Vue 3 page: search + ScheduleCard, FAQ, support block
 Dockerfile one image that serves both the API and the built frontend
 ```
 
@@ -31,12 +38,16 @@ Searches you can try from `backend/data/mock_sheet.json` (all names are made up)
 
 | Search | Result |
 |---|---|
-| `нурлан айбар` | finds "Айбар Нұрлан Серікұлы", badge "Коуч без изменений" |
-| `асел толеген` | "График изменён", with the team's own note in RU and KK |
-| `тимур ахметов` / `мадина ержанова` | "Коуч изменён" / "Заявка в обработке" |
+| `нурлан айбар` | finds "Айбар Нұрлан Серікұлы", badge "Активный график" |
+| `асел толеген` | another learner from the same tab (Russian headers, title row above them) |
+| `тимур ахметов` | tab with English headers in a different order, badge "График изменён" |
+| `алия серикова` | tab with no header row at all (positional columns) |
+| `мадина ержанова` | no schedule yet, so the badge reads "График уточняется" |
 | `данияр беков` | learner marked inactive |
 | `алия сер` | too vague (more than 3 matches), so nothing is shown |
 | `Айбар` | asks for both first name and surname |
+
+To see the temporary password on the card, start the backend with `EXPOSE_TEMP_PASSWORD=true`.
 
 ### How name search works
 
@@ -53,26 +64,27 @@ Searches you can try from `backend/data/mock_sheet.json` (all names are made up)
 
 ## The Google Sheet
 
-Create a tab named **`Learners`**. Put the headers in row 1; header matching ignores case and spaces, and Russian header names also work.
+Every tab is read, so you can keep one tab per batch or group. Columns are matched **by header name**, in any order. Matching ignores case, extra spaces and Russian word endings, and partial headers work, so "ФИО ученика" counts as ФИО.
 
-| full_name | schedule | self_study_day | coach | coach_email | stage | status | note | active |
-|---|---|---|---|---|---|---|---|---|
-| Айбар Нұрлан Серікұлы | Вторник/Пятница 16:30-18:30 | Пятница | Aliya | coach@… | Самообучение | Коуч без изменений | *(optional)* | *(blank = active)* |
+| Field | Header examples | On the card? |
+|---|---|---|
+| Full name (**required**) | `ФИО`, `ФИО ученика`, `Full Name` | yes |
+| Schedule | `Расписание`, `График`, `Schedule` | yes |
+| Coach | `Коуч`, `Coach` | yes |
+| Room | `Кабинет`, `Комната`, `Room` | yes |
+| Email | `Почта`, `Email` | yes |
+| Temporary password | `Пароль`, `Временный пароль`, `Password` | only if `EXPOSE_TEMP_PASSWORD=true` |
+| TUMO ID | `TUMO ID`, `ID` | never (used to spot the same learner in two tabs) |
+| Status | `Статус`, `Status` (optional) | as the badge |
 
-- **`status`:** shown as the badge, with a standard explanation underneath. Recognised values:
-  - `Коуч без изменений`
-  - `Коуч изменен`
-  - `График изменен`
-  - `Без изменений`
-  - `В обработке`
-
-  Any other text is shown as typed, without an explanation.
-- **`stage`:** `Самообучение`, `Воркшоп` or `Проект` (other text is shown as typed).
-- **`note`:** a free-text note from the team, shown in a blue box. Add `note_kk` to give a Kazakh version.
-- **Kazakh schedule text:** in Kazakh mode, weekday names in `schedule` and `self_study_day` are translated automatically (Вторник → Сейсенбі). To write the Kazakh text yourself, add `schedule_kk` / `self_study_day_kk` columns.
-- **`active`:** `нет` / `no` / `0` hides the learner's schedule.
-
-Any other column is ignored and never cached. Even so, **don't put IINs in the sheet**.
+- **Header row:** title rows above the headers are fine; the parser looks for the header row in the top 5 rows. A tab with no header row is read in the order of the table above, and rows with fewer than 3 filled cells (notes, titles) are skipped. Tabs with no names, such as notes, are ignored.
+- **Badge:**
+  - With no `Статус` column, the badge shows **"Активный график"** when a schedule is filled in and **"График уточняется"** when it isn't.
+  - Recognised status values: `График изменен`, `Коуч изменен`, `В обработке`, `Неактивен`.
+  - `Неактивен` hides the learner's card. Any other status text is shown as typed.
+- **Ambiguous headers:** a header that mentions two fields, such as "Email коуча", isn't treated as the learner's email. It's kept server-side only.
+- **Kazakh mode:** weekday names in the schedule are translated automatically (Вторник → Сейсенбі).
+- **Columns never kept:** columns whose header looks like an IIN (ИИН/ЖСН), phone, birth date, address or parent details are dropped. So are 12-digit IIN-shaped values in other columns. Even so, **don't put IINs in the sheet**.
 
 ### Connecting the real sheet
 
@@ -86,7 +98,7 @@ Any other column is ignored and never cached. Even so, **don't put IINs in the s
 
 ## How it keeps running
 
-- **No network on the request path.** Lookups read an in-memory index. The Google API is only called by a background sync, once per `SYNC_INTERVAL_SECONDS`, and that sync fetches all three tabs in a **single batched request**.
+- **No network on the request path.** Lookups read an in-memory index. The Google API is only called by a background sync, once per `SYNC_INTERVAL_SECONDS`, and each sync makes two requests: one to list the tabs (so new tabs are picked up) and one **batched read of all tabs**.
 - **Falls back to the cache automatically.** If a sync fails (quota, network, bad credentials, broken sheet), the app keeps serving the last good data, and `/api/health` reports `degraded`.
 - **Survives restarts.** Each good snapshot is written atomically to `data/cache/snapshot.json`. On startup this file loads first, so the app works straight away even if Google is down.
 - **Optional instant refresh.** Set `ADMIN_TOKEN`, then `curl -X POST -H "X-Admin-Token: …" /api/admin/refresh` to sync right after editing the sheet. This endpoint is disabled when no token is set.
@@ -98,8 +110,12 @@ Any other column is ignored and never cached. Even so, **don't put IINs in the s
 
 ## Privacy
 
-- **Only allow-listed columns are kept** (see `backend/app/sheet.py`). Any other column, such as an IIN or phone number added by mistake, is dropped during parsing.
-- **The API returns only what the card shows.**
+- **The API returns only what the card shows.** The response shape (`app/schemas/schedule.py`) has no field for TUMO ID, IIN or other extra columns, so they can't be returned.
+- **Temporary passwords are off by default.** They are returned only when `EXPOSE_TEMP_PASSWORD=true`.
+  - **Risk while it's on:** anyone who knows a learner's full name can see that learner's password until they change it. Turn it on for onboarding, and off again afterwards.
+  - **On the card:** the password is masked until "Показать" is pressed.
+- **The cache file is owner-only.** `data/cache/snapshot.json` is written with `0600` permissions because it can contain temporary passwords.
+- **Sensitive columns are dropped** during parsing (see "The Google Sheet" above).
 - **Names stay out of URLs and logs.** The search uses `POST`, and nothing about the learner is stored in the browser. Only the chosen language is remembered.
 
 ## Deploying

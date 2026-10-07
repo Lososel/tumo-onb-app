@@ -1,4 +1,4 @@
-"""Data sources. Each returns raw tab rows; parsing/whitelisting happens in sheet.parse_tabs.
+"""Data sources. Each returns every tab as a raw value grid; parsing happens in services.sheets.
 
 - MockJsonSource:     reads data/mock_sheet.json — works out of the box, no credentials.
 - GoogleSheetsSource: reads the live Google Sheet with a service account (credentials.json).
@@ -10,8 +10,8 @@ import json
 from pathlib import Path
 from typing import Protocol
 
-from .config import Settings
-from .sheet import TABS, RawTabs, rows_to_records
+from .core.config import Settings
+from .services.sheets import RawTabs
 
 
 class DataSource(Protocol):
@@ -21,6 +21,8 @@ class DataSource(Protocol):
 
 
 class MockJsonSource:
+    """Mock file format: {"Tab title": [[header...], [row...], ...], ...} — same as the live sheet."""
+
     name = "mock"
 
     def __init__(self, path: Path):
@@ -29,11 +31,13 @@ class MockJsonSource:
     def fetch(self) -> RawTabs:
         with self.path.open(encoding="utf-8") as f:
             data = json.load(f)
-        return {tab: data.get(tab, []) for tab in TABS}
+        if not isinstance(data, dict):
+            raise ValueError("mock sheet must be an object of {tab title: [[row], ...]}")
+        return {str(tab): list(grid) for tab, grid in data.items()}
 
 
 class GoogleSheetsSource:
-    """Reads all tabs in a single batched API call to stay well under Google's quotas.
+    """Reads every tab: one metadata call lists the tabs, one batched call reads them all.
 
     Setup: create a service account in Google Cloud, enable the Sheets API, download its key
     as backend/credentials.json, and share the spreadsheet with the service account's email
@@ -63,14 +67,18 @@ class GoogleSheetsSource:
 
     def fetch(self) -> RawTabs:
         try:
-            result = self._open().values_batch_get(list(TABS))
+            spreadsheet = self._open()
+            titles = [ws.title for ws in spreadsheet.worksheets()]  # picks up newly added tabs
+            # Quote titles so names with spaces or punctuation are valid A1 ranges.
+            ranges = ["'" + t.replace("'", "''") + "'" for t in titles]
+            result = spreadsheet.values_batch_get(ranges) if ranges else {}
         except Exception:
             self._spreadsheet = None  # force a fresh connection next time
             raise
-        out: RawTabs = {}
-        for tab, value_range in zip(TABS, result.get("valueRanges", [])):
-            out[tab] = rows_to_records(value_range.get("values", []))
-        return out
+        return {
+            title: value_range.get("values", [])
+            for title, value_range in zip(titles, result.get("valueRanges", []))
+        }
 
 
 def build_source(settings: Settings) -> DataSource:

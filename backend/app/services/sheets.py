@@ -48,6 +48,7 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
 POSITIONAL_FIELDS = list(FIELD_ALIASES)[:7]  # status is never assumed positionally
 
 HEADER_SCAN_ROWS = 5  # how many top rows may hold titles before the header row
+POSITIONAL_MIN_CELLS = 3  # header-less tabs: rows with fewer filled cells are notes/titles
 
 # Column headers whose data we refuse to keep anywhere (matched as substrings of the header).
 _SENSITIVE_HEADER = re.compile(
@@ -186,10 +187,15 @@ def parse_grid(tab: str, grid: Grid) -> list[LearnerRecord]:
     start, fields, extras = detect_columns(grid)
     if "full_name" not in fields:
         return []
+    positional = start == 0
     safe_extras = {i: h for i, h in extras.items() if not _SENSITIVE_HEADER.search(h)}
 
     learners = []
     for row in grid[start:]:
+        # Without a header we can't tell a learner from a note or title line by column name,
+        # so require a row that actually looks like a record (name plus a couple of fields).
+        if positional and sum(1 for c in row if clean_text(c)) < POSITIONAL_MIN_CELLS:
+            continue
         get = lambda f: _cell(row, fields.get(f))  # noqa: E731
         full_name = get("full_name")
         tokens = name_tokens(full_name)
