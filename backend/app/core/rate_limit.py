@@ -21,7 +21,11 @@ class RateLimiter:
         while hits and now - hits[0] > 60:
             hits.popleft()
         if len(hits) >= self.per_minute:
-            raise HTTPException(429, "Too many lookups. Please wait a minute and try again.")
+            raise HTTPException(
+                429,
+                "Too Many Requests. Please wait a minute before searching again.",
+                headers={"Retry-After": str(max(1, int(60 - (now - hits[0])) + 1))},
+            )
         hits.append(now)
         if len(self._hits) > 10_000:  # bound memory
             self._hits = defaultdict(deque, {k: v for k, v in self._hits.items() if v})

@@ -14,7 +14,7 @@ from ...services.sheets import name_tokens
 from ...store import LearnerStore
 
 MIN_TOKENS = 2  # first name + last name, so one word can't list everyone named "Али"
-MIN_TOKEN_LEN = 2
+MIN_TOKEN_LEN = 3  # each of those words needs 3+ letters: blocks "А Е"-style sweeps
 MAX_RESULTS = 3  # more matches than this means the query is too vague to show anything
 
 router = APIRouter(prefix="/api/schedule", tags=["schedule"])
@@ -40,8 +40,18 @@ def rate_limit(request: Request) -> None:
 PENDING = "Уточняется"  # shown for room/email until the sheet has the column (or the cell is filled)
 
 
+def _student_email(email: str, domains: tuple[str, ...]) -> str:
+    """Only institutional addresses (e.g. @tumo.world) are shown; anything else — a personal
+    Gmail typed into the wrong column, say — is withheld."""
+    domain = email.rsplit("@", 1)[-1].lower() if "@" in email else ""
+    return email if domain and domain in domains else ""
+
+
 def to_card(
-    r: LearnerRecord, expose_temp_password: bool, coaches: CoachDirectory | None = None
+    r: LearnerRecord,
+    expose_temp_password: bool,
+    coaches: CoachDirectory | None = None,
+    email_domains: tuple[str, ...] = ("tumo.world",),
 ) -> ScheduleCard:
     """Map an internal record to the public card. tumo_id and extra_info are never copied.
 
@@ -56,7 +66,7 @@ def to_card(
         coach_name=coach_name or None,
         coach_email=coach_email,
         room=r.room or PENDING,
-        default_email=r.default_email or PENDING,
+        default_email=_student_email(r.default_email, email_domains) or PENDING,
         temp_password=(r.temp_password or None) if expose_temp_password else None,
         status_code=r.status_code,
         status=r.status or None,
@@ -96,6 +106,9 @@ def _lookup(
         return LookupResponse(status="too_many", data_updated_at=updated)
     return LookupResponse(
         status="ok",
-        results=[to_card(r, settings.expose_temp_password, coaches) for r in active],
+        results=[
+            to_card(r, settings.expose_temp_password, coaches, settings.student_email_domains)
+            for r in active
+        ],
         data_updated_at=updated,
     )

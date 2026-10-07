@@ -60,7 +60,13 @@ class Settings:
     # "4 поток". Empty = all tabs. If no tab matches, all tabs are used (logged as a warning).
     tab_filter: str = ""
     cors_origins: tuple[str, ...] = ("http://localhost:5173",)
-    lookup_rate_limit_per_minute: int = 30
+    # Anti-scraping: max lookups per client IP per minute (0 disables; tests opt out explicitly).
+    lookup_rate_limit_per_minute: int = 5
+    # Student emails shown on the card must be on one of these domains; others are withheld.
+    student_email_domains: tuple[str, ...] = ("tumo.world",)
+    # /docs and /openapi.json are off in production: less surface, and their CDN assets would
+    # need a looser Content-Security-Policy.
+    enable_api_docs: bool = False
     # Reverse proxies in front of the app that append to X-Forwarded-For (Render: 1). The client
     # IP for rate limiting is the Nth entry from the right; 0 = use the socket peer address.
     proxy_hops: int = 0
@@ -89,7 +95,13 @@ class Settings:
             cors_origins=tuple(
                 o.strip() for o in env("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()
             ),
-            lookup_rate_limit_per_minute=_int("LOOKUP_RATE_LIMIT_PER_MINUTE", 30),
+            lookup_rate_limit_per_minute=_int("LOOKUP_RATE_LIMIT_PER_MINUTE", 5),
+            student_email_domains=tuple(
+                d.strip().lower().lstrip("@")
+                for d in env("STUDENT_EMAIL_DOMAINS", "tumo.world").split(",")
+                if d.strip()
+            ),
+            enable_api_docs=env("ENABLE_API_DOCS", "false").strip().lower() not in _FALSE,
             proxy_hops=max(0, _int("PROXY_HOPS", 0)),
             admin_token=env("ADMIN_TOKEN", "").strip(),
             static_dir=_resolve(env("STATIC_DIR", "../frontend/dist")),

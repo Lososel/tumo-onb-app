@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from .api.endpoints import schedule
 from .core.config import Settings
 from .core.rate_limit import RateLimiter
+from .core.security import SecurityHeadersMiddleware
 from .schemas.schedule import HealthResponse
 from .services.coaches import CoachDirectory
 from .sources import build_fallback_source, build_source
@@ -40,11 +41,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         yield
         await store.stop()
 
-    app = FastAPI(title="TUMO Astana Learner Schedule", version="3.0.0", lifespan=lifespan)
+    docs = settings.enable_api_docs  # off in production (see Settings.enable_api_docs)
+    app = FastAPI(
+        title="TUMO Astana Learner Schedule",
+        version="3.0.0",
+        lifespan=lifespan,
+        docs_url="/docs" if docs else None,
+        redoc_url=None,
+        openapi_url="/openapi.json" if docs else None,
+    )
     app.state.settings = settings
     app.state.store = store
     app.state.limiter = RateLimiter(settings.lookup_rate_limit_per_minute)
     app.state.coaches = CoachDirectory.load(settings.coaches_file)
+    app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(settings.cors_origins),

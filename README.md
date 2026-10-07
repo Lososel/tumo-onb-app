@@ -123,6 +123,20 @@ Export each tab with *File → Download → CSV* and put the files in `backend/d
 - **All text:** `frontend/src/locales/ru.ts` and `kk.ts` hold every piece of text on the page, including the FAQ questions and answers. Add an FAQ entry to both files.
 - **Contacts:** the email, WhatsApp number, Instagram and website are in `frontend/src/config.ts`. The "написать в WhatsApp" button opens a chat with a pre-filled message that includes the name typed in the search box.
 
+## Security
+
+- **Anti-scraping:**
+  - at most **5 lookups per minute per visitor IP** (`LOOKUP_RATE_LIMIT_PER_MINUTE`), then HTTP 429 *"Too Many Requests. Please wait a minute before searching again."* with a `Retry-After` header;
+  - each visitor is counted separately behind Render's proxy (`PROXY_HOPS`);
+  - queries need **two words of at least 3 letters**;
+  - more than 3 matches reveal nothing.
+- **Response fields:** only the card fields are returned. Student emails are shown only on `@tumo.world` (`STUDENT_EMAIL_DOMAINS`). Personal and parent columns are dropped while the sheet is read.
+- **HTTP headers** on every response:
+  - a strict `Content-Security-Policy` (no inline or eval scripts, `frame-ancestors 'none'`), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`;
+  - `Referrer-Policy: no-referrer`, HSTS and `Permissions-Policy`;
+  - `Cache-Control: no-store` on API responses.
+- **API docs** (`/docs`, `/openapi.json`) are off unless `ENABLE_API_DOCS=true`. The container also stops announcing its server software (`--no-server-header`).
+
 ## Privacy
 
 - **The API returns only what the card shows.** The response shape (`app/schemas/schedule.py`) has no field for TUMO ID, IIN or other extra columns, so they can't be returned.

@@ -76,6 +76,7 @@ def test_missing_credentials_file(tmp_path):
 def make_client(tmp_path):
     def _make(**kw):
         kw.setdefault("cache_file", tmp_path / "snapshot.json")
+        kw.setdefault("lookup_rate_limit_per_minute", 0)
         return TestClient(create_app(Settings(**kw)))
 
     return _make
@@ -174,7 +175,7 @@ def test_invalid_numeric_env_values_do_not_crash(monkeypatch):
     monkeypatch.setenv("LOOKUP_RATE_LIMIT_PER_MINUTE", "lots")
     monkeypatch.setenv("PROXY_HOPS", "one")
     s = Settings.from_env()
-    assert (s.sync_interval_seconds, s.lookup_rate_limit_per_minute, s.proxy_hops) == (300, 30, 0)
+    assert (s.sync_interval_seconds, s.lookup_rate_limit_per_minute, s.proxy_hops) == (300, 5, 0)
 
 
 def test_credentials_json_env_is_read(monkeypatch):

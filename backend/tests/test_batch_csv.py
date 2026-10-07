@@ -86,6 +86,7 @@ def test_personal_columns_never_stored():
 @pytest.fixture
 def csv_client(tmp_path):
     def _make(**kw):
+        kw.setdefault("lookup_rate_limit_per_minute", 0)
         settings = Settings(data_source="csv", csv_path=FIXTURE, cache_file=tmp_path / "snap.json", **kw)
         return TestClient(create_app(settings))
 
@@ -108,7 +109,7 @@ def test_lookup_from_batch_csv(csv_client, query):
                 "coach_name": "Назым",  # resolved via the coach directory
                 "coach_email": "rysbayeva.nazym@tumo.center",
                 "room": "WR 5, 3 этаж",
-                "default_email": "artem.petrov@tumo.example",
+                "default_email": "Уточняется",  # tumo.example is not @tumo.world: withheld
                 "temp_password": None,
                 "status_code": "waitlist",
                 "status": None,

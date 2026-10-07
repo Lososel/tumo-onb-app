@@ -17,6 +17,7 @@ CARD_FIELDS = {
 @pytest.fixture
 def make_client(tmp_path):
     def _make(mock_file=MOCK, **kw):
+        kw.setdefault("lookup_rate_limit_per_minute", 0)  # rate limiting has its own tests
         settings = Settings(mock_file=mock_file, cache_file=tmp_path / "snapshot.json", **kw)
         return TestClient(create_app(settings))
 
@@ -39,7 +40,7 @@ def test_lookup_returns_schedule_card(make_client):
             "coach_name": "Aliya",  # not in the coach directory: shown as written, no email
             "coach_email": None,
             "room": "Lab 2",
-            "default_email": "aibar.nurlan@example.com",
+            "default_email": "Уточняется",  # example.com is not @tumo.world: withheld
             "temp_password": None,  # EXPOSE_TEMP_PASSWORD defaults to off
             "status_code": "active_schedule",
             "status": None,
