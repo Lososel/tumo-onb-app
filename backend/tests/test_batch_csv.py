@@ -105,7 +105,7 @@ def test_lookup_from_batch_csv(csv_client, query):
             {
                 "full_name": "Петров Артём Андреевич",
                 "schedule": "Понедельник, Четверг : 10:30–12:30 (лист ожидания)",
-                "coach_name": "Рысбаева Назым",  # resolved via the coach directory
+                "coach_name": "Назым",  # resolved via the coach directory
                 "coach_email": "rysbayeva.nazym@tumo.center",
                 "room": "WR 5, 3 этаж",
                 "default_email": "artem.petrov@tumo.example",

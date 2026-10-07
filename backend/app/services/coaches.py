@@ -59,9 +59,32 @@ def _token_matches(word: str, coach_tokens: tuple[str, ...]) -> bool:
 
 @dataclass(frozen=True)
 class Coach:
-    name: str
+    name: str  # full name as listed, used for matching
     email: str
     tokens: tuple[str, ...]  # Cyrillic name tokens + Latin tokens from the email's local part
+    first_name: str = ""
+    last_name: str = ""
+    display: str = ""  # shown on the card: first name, plus surname if another coach shares it
+
+
+def _with_display_names(coaches: list[Coach]) -> list[Coach]:
+    """First name only ("Назым"); "first name + surname" when several coaches share the first
+    name ("Дана Құрақ", "Аружан Хамзина"). Entries without first_name show the full name."""
+    from collections import Counter
+    from dataclasses import replace
+
+    key = lambda c: " ".join(name_tokens(c.first_name))  # noqa: E731 - case/Kazakh-letter insensitive
+    counts = Counter(key(c) for c in coaches if c.first_name)
+    out = []
+    for c in coaches:
+        if not c.first_name:
+            display = c.name
+        elif counts[key(c)] > 1 and c.last_name:
+            display = f"{c.first_name} {c.last_name}"
+        else:
+            display = c.first_name
+        out.append(replace(c, display=display))
+    return out
 
 
 class CoachDirectory:
@@ -81,8 +104,10 @@ class CoachDirectory:
             cyrillic = _norm(name_tokens(name))
             latin = _norm([t for t in local if len(t) >= MIN_TOKEN]) + _transliterate(cyrillic)
             tokens = tuple(dict.fromkeys(cyrillic + latin))
-            coaches.append(Coach(name=name, email=email, tokens=tokens))
-        return cls(coaches)
+            first = " ".join(str(e.get("first_name", "")).split())
+            last = " ".join(str(e.get("last_name", "")).split())
+            coaches.append(Coach(name=name, email=email, tokens=tokens, first_name=first, last_name=last))
+        return cls(_with_display_names(coaches))
 
     @classmethod
     def load(cls, path: Path) -> "CoachDirectory":
@@ -115,4 +140,4 @@ class CoachDirectory:
     def resolve(self, raw: str) -> tuple[str, str | None]:
         """(name to show, email or None). Unknown/ambiguous values are shown as written."""
         coach = self.find(raw)
-        return (coach.name, coach.email) if coach else (" ".join((raw or "").split()), None)
+        return (coach.display, coach.email) if coach else (" ".join((raw or "").split()), None)

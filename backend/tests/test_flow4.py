@@ -96,7 +96,7 @@ def test_api_fallbacks_for_missing_columns(client):
             {
                 "full_name": "Жұмабек Әлия Серікқызы",
                 "schedule": "Понедельник, Четверг : 10:30–12:30",
-                "coach_name": "Рысбаева Назым",
+                "coach_name": "Назым",
                 "coach_email": "rysbayeva.nazym@tumo.center",
                 "room": "Уточняется",
                 "default_email": "Уточняется",

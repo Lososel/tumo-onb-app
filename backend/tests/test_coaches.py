@@ -16,29 +16,29 @@ DIRECTORY = CoachDirectory.load(COACHES_FILE)
 @pytest.mark.parametrize(
     "cell, name, email",
     [
-        ("Gulnaz", "Бектурганова Гулназ", "bekturganova.gulnaz@tumo.center"),
-        ("Nazym", "Рысбаева Назым", "rysbayeva.nazym@tumo.center"),
-        ("Alinur", "Манап Әлинұр", "manap.alinur@tumo.center"),
-        ("Nurai", "Ергазиева Нурай", "nurai.ergazyeva@tumo.center"),
-        ("Nuray", "Ергазиева Нурай", "nurai.ergazyeva@tumo.center"),  # y/i spelling
-        ("Nurasyl", "Жананов Нурасыл", "nurassyl.zhananov@tumo.center"),  # ss/s spelling
-        ("Rizakhmet", "Даулетбай Ризахмет", "rizahmet.dauletbay@tumo.center"),  # kh/h spelling
-        ("Almas", "Мусалимов Алмас", "almas.musalimov@tumo.center"),
-        ("Dariga", "Хасен Дариға", "dariga.khassen@tumo.center"),
-        ("Elmira", "Шайнурова Эльмира", "shainurova.elmira@tumo.center"),
-        ("Alen", "Жұмағали Ален Русланұлы", "zhumagali.alen@tumo.center"),
-        ("Tahmina", "Қабылбек Тахмина Маратқызы", "t.kabylbek@tumo.center"),
-        ("  NAZYM ", "Рысбаева Назым", "rysbayeva.nazym@tumo.center"),
-        ("Назым", "Рысбаева Назым", "rysbayeva.nazym@tumo.center"),
-        ("Әлинұр", "Манап Әлинұр", "manap.alinur@tumo.center"),
-        ("Алинур", "Манап Әлинұр", "manap.alinur@tumo.center"),  # typed without Kazakh letters
-        ("Dana T.", "Телжан Дана", "telzhan.dana@tumo.center"),
+        ("Gulnaz", "Гулназ", "bekturganova.gulnaz@tumo.center"),
+        ("Nazym", "Назым", "rysbayeva.nazym@tumo.center"),
+        ("Alinur", "Әлинұр", "manap.alinur@tumo.center"),
+        ("Nurai", "Нурай", "nurai.ergazyeva@tumo.center"),
+        ("Nuray", "Нурай", "nurai.ergazyeva@tumo.center"),  # y/i spelling
+        ("Nurasyl", "Нурасыл", "nurassyl.zhananov@tumo.center"),  # ss/s spelling
+        ("Rizakhmet", "Ризахмет", "rizahmet.dauletbay@tumo.center"),  # kh/h spelling
+        ("Almas", "Алмас", "almas.musalimov@tumo.center"),
+        ("Dariga", "Дариға", "dariga.khassen@tumo.center"),
+        ("Elmira", "Эльмира", "shainurova.elmira@tumo.center"),
+        ("Alen", "Ален", "zhumagali.alen@tumo.center"),
+        ("Tahmina", "Тахмина", "t.kabylbek@tumo.center"),
+        ("  NAZYM ", "Назым", "rysbayeva.nazym@tumo.center"),
+        ("Назым", "Назым", "rysbayeva.nazym@tumo.center"),
+        ("Әлинұр", "Әлинұр", "manap.alinur@tumo.center"),
+        ("Алинур", "Әлинұр", "manap.alinur@tumo.center"),  # typed without Kazakh letters
+        ("Dana T.", "Дана Телжан", "telzhan.dana@tumo.center"),
         ("Dana Kurak", "Дана Құрақ", "kurak.dana@tumo.center"),
         ("Құрақ Дана", "Дана Құрақ", "kurak.dana@tumo.center"),
-        ("Ахметова Дана", "Ахметова Дана", "akhmetova.dana@tumo.center"),
-        ("Aruzhan Kh.", "Хамзина Аружан", "khamzina.aruzhan@tumo.center"),
-        ("Aruzhan T", "Торебек Аружан", "torebek.aruzhan@tumo.center"),
-        ("Мырзахмет Аружан", "Мырзахмет Аружан", "aruzhan.myrzakhmet@tumo.center"),
+        ("Ахметова Дана", "Дана Ахметова", "akhmetova.dana@tumo.center"),
+        ("Aruzhan Kh.", "Аружан Хамзина", "khamzina.aruzhan@tumo.center"),
+        ("Aruzhan T", "Аружан Торебек", "torebek.aruzhan@tumo.center"),
+        ("Мырзахмет Аружан", "Аружан Мырзахмет", "aruzhan.myrzakhmet@tumo.center"),
         ("Kurak.Dana@tumo.center", "Дана Құрақ", "kurak.dana@tumo.center"),
     ],
 )
@@ -88,7 +88,7 @@ def test_card_shows_full_name_and_email(tmp_path):
             card = c.post("/api/schedule/lookup", json={"query": q}).json()["results"][0]
             return card["coach_name"], card["coach_email"]
 
-        assert coach("сидоров максим") == ("Манап Әлинұр", "manap.alinur@tumo.center")
+        assert coach("сидоров максим") == ("Әлинұр", "manap.alinur@tumo.center")
         assert coach("иванова анна") == ("Dana", None)  # ambiguous: as written, no email
         assert coach("петров олег") == ("Aliya", None)  # not in the list yet
 
@@ -96,3 +96,21 @@ def test_card_shows_full_name_and_email(tmp_path):
 def test_patronymic_prefix_does_not_match_another_coach():
     # "Arman" is only the start of Канбакова Данель Арманқызы's patronymic, not a coach's name.
     assert DIRECTORY.find("Arman") is None
+
+
+def test_display_is_first_name_with_surname_only_for_shared_first_names():
+    shown = {c.email: c.display for c in DIRECTORY.coaches}
+    assert shown["rysbayeva.nazym@tumo.center"] == "Назым"
+    assert shown["t.kabylbek@tumo.center"] == "Тахмина"  # patronymic and surname dropped
+    assert shown["dariya.aidyn@tumo.center"] == "Дария"  # first-name-first entry
+    assert shown["dariga.khassen@tumo.center"] == "Дариға"  # similar but different name
+    danas = sorted(v for v in shown.values() if v.startswith("Дана"))
+    aruzhans = sorted(v for v in shown.values() if v.startswith("Аружан"))
+    assert danas == ["Дана Ахметова", "Дана Телжан", "Дана Құрақ"]
+    assert aruzhans == ["Аружан Мырзахмет", "Аружан Торебек", "Аружан Хамзина"]
+    assert sum(" " in v for v in shown.values()) == 6  # only the shared first names get a surname
+
+
+def test_entries_without_first_name_show_the_full_name():
+    d = CoachDirectory.from_entries([{"name": "Новый Коуч", "email": "new.coach@tumo.center"}])
+    assert d.resolve("new.coach@tumo.center") == ("Новый Коуч", "new.coach@tumo.center")
