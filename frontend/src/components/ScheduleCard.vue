@@ -3,6 +3,7 @@ import { computed, ref, useId, watch } from 'vue'
 import { PENDING, type Learner } from '../api'
 import { coachName } from '../coaches'
 import { locale, localized, t } from '../i18n'
+import { titleCase } from '../names'
 import { communityFor } from '../whatsapp'
 
 const props = defineProps<{ learner: Learner }>()
@@ -70,7 +71,7 @@ async function copyPassword() {
 <template>
   <article class="rounded-3xl border-2 border-ink bg-white p-5 sm:p-8">
     <div class="flex flex-col-reverse items-start gap-3 sm:flex-row sm:items-start sm:justify-between">
-      <h3 class="font-display text-xl leading-snug font-black text-ink sm:text-2xl">{{ learner.full_name }}</h3>
+      <h3 class="font-display text-xl leading-snug font-black text-ink sm:text-2xl">{{ titleCase(learner.full_name) }}</h3>
       <span
         v-if="badge"
         class="shrink-0 rounded-full px-3.5 py-1.5 text-xs font-extrabold tracking-wide uppercase"

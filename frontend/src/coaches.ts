@@ -1,4 +1,5 @@
 import type { Locale } from './i18n'
+import { titleCase } from './names'
 
 /**
  * Coach names are entered in Latin script in the sheet ("Nazym", "Dana Akhmetova"). On the site
@@ -65,8 +66,8 @@ function transliterate(word: string): string {
   return out.charAt(0).toUpperCase() + out.slice(1)
 }
 
-/** "Dana Akhmetova" -> "Дана Ахметова" (ru) / "Дана Ахметова" (kk); Cyrillic input unchanged. */
+/** "Dana Akhmetova" -> "Дана Ахметова" (ru) / "Дана Ахметова" (kk); Cyrillic input just proper-cased. */
 export function coachName(name: string | null, locale: Locale): string | null {
   if (!name) return name
-  return name.replace(/[A-Za-z]+/g, (word) => KNOWN[word.toLowerCase()]?.[locale] ?? transliterate(word))
+  return titleCase(name.replace(/[A-Za-z]+/g, (word) => KNOWN[word.toLowerCase()]?.[locale] ?? transliterate(word)))
 }

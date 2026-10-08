@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { errorKind, lookupSchedule, type ErrorKind, type LookupResponse } from '../api'
 import { format, t } from '../i18n'
+import { titleCase } from '../names'
 import ScheduleCard from './ScheduleCard.vue'
 import SectionTitle from './SectionTitle.vue'
 
@@ -18,6 +19,7 @@ async function search() {
     result.value = null
     return
   }
+  query.value = titleCase(query.value)
   loading.value = true
   error.value = null
   try {
