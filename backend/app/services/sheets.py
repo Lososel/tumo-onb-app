@@ -128,12 +128,40 @@ def xlsx_to_tabs(data: bytes, tab_filter: str = "") -> RawTabs:
     except Exception as exc:
         raise SheetsConfigError(f"file is not a readable .xlsx workbook ({type(exc).__name__})") from None
     try:
-        out: RawTabs = {}
-        for title in select_tabs(wb.sheetnames, tab_filter):
-            out[title] = [[_xlsx_cell(v) for v in row] for row in wb[title].iter_rows(values_only=True)]
-        return out
+        return {title: _xlsx_grid(wb[title]) for title in select_tabs(wb.sheetnames, tab_filter)}
     finally:
         wb.close()
+
+
+# A gap this long means the data has ended; what follows is formatting or stray notes.
+MAX_BLANK_ROWS = 1000
+
+
+def _xlsx_grid(ws: Any) -> Grid:
+    """Cell values of one tab, without the empty padding a formatted sheet can carry.
+
+    A sheet whose formatting covers whole rows/columns declares a huge dimension (up to
+    A1:XFD1048576), and read-only openpyxl pads every row to it: 16,384 cells per row, enough to
+    exhaust a small server's memory. So the declared size is ignored, trailing empty cells are
+    trimmed, empty rows are skipped (header detection doesn't need them) and reading stops after
+    MAX_BLANK_ROWS empty rows in a row.
+    """
+    if hasattr(ws, "reset_dimensions"):
+        ws.reset_dimensions()
+    grid: Grid = []
+    blank = 0
+    for row in ws.iter_rows(values_only=True):
+        cells = [_xlsx_cell(v) for v in row]
+        while cells and not cells[-1].strip():
+            cells.pop()
+        if not cells:
+            blank += 1
+            if blank >= MAX_BLANK_ROWS:
+                break
+            continue
+        blank = 0
+        grid.append(cells)
+    return grid
 
 
 # A grid is the tab's cell values, top row first. RawTabs maps tab title -> grid.

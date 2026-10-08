@@ -239,3 +239,69 @@ def test_zone_added_in_column_j(zone_header):
     maxim, aliya = parse_tabs(xlsx_to_tabs(buf.getvalue()), source="test").learners
     assert maxim.room == "WR 5, 3 этаж"
     assert aliya.room == ""  # empty cell -> API answers "Уточняется"
+
+
+def _bloated_workbook(dimension: str, blank_rows: int) -> bytes:
+    """A real-looking tab whose formatting declares a huge size and runs far past the data."""
+    import io
+    import re
+    import zipfile
+
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "4 поток"
+    ws.append(["ФИО ребенка", "Расписание", "Коуч"])
+    ws.append(["Иванова Анна", "Пн/Чт 10:30-12:30", "Alinur"])
+    ws.append(["Смирнов Олег", "Вт/Пт 14:30-16:30", "Nazym"])
+    buf = io.BytesIO()
+    wb.save(buf)
+    src, out = zipfile.ZipFile(io.BytesIO(buf.getvalue())), io.BytesIO()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+        for item in src.namelist():
+            data = src.read(item)
+            if item == "xl/worksheets/sheet1.xml":
+                xml = data.decode()
+                xml = re.sub(r'<dimension ref="[^"]*"\s*/>', f'<dimension ref="{dimension}"/>', xml)
+                styled = "".join(f'<row r="{r}" s="1" customFormat="1"/>' for r in range(4, 4 + blank_rows))
+                xml = xml.replace("</sheetData>", styled + "</sheetData>")
+                data = xml.encode()
+            z.writestr(item, data)
+    return out.getvalue()
+
+
+def test_formatted_whole_sheet_does_not_explode_memory():
+    """Formatting whole rows/columns makes the file declare A1:XFD1048576; reading must not pad
+    every row to 16,384 cells (that exhausted the server's memory after a sheet edit)."""
+    import time
+
+    from app.services.sheets import parse_tabs, xlsx_to_tabs
+
+    data = _bloated_workbook("A1:XFD1048576", blank_rows=20_000)
+    started = time.monotonic()
+    tabs = xlsx_to_tabs(data)
+    assert time.monotonic() - started < 20
+    grid = tabs["4 поток"]
+    assert grid == [
+        ["ФИО ребенка", "Расписание", "Коуч"],
+        ["Иванова Анна", "Пн/Чт 10:30-12:30", "Alinur"],
+        ["Смирнов Олег", "Вт/Пт 14:30-16:30", "Nazym"],
+    ]
+    names = sorted(r.full_name for r in parse_tabs(tabs, source="google").learners)
+    assert names == ["Иванова Анна", "Смирнов Олег"]
+
+
+def test_data_after_a_short_gap_is_kept_but_a_long_gap_ends_the_tab(monkeypatch):
+    from app.services import sheets
+
+    monkeypatch.setattr(sheets, "MAX_BLANK_ROWS", 5)
+    rows = [["ФИО ребенка", "Расписание"], ["Иванова Анна", "Пн"], [None], [None], ["Смирнов Олег", "Вт"]]
+    rows += [[None]] * 5 + [["Заметка внизу", "x"]]
+
+    class Sheet:
+        def iter_rows(self, values_only=True):
+            return iter(rows)
+
+    assert sheets._xlsx_grid(Sheet()) == [["ФИО ребенка", "Расписание"], ["Иванова Анна", "Пн"],
+                                          ["Смирнов Олег", "Вт"]]
