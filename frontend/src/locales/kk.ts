@@ -45,7 +45,7 @@ const kk: Messages = {
     coach: 'Коуч',
     coachEmail: 'Коучтың email-ы',
     room: 'Кабинет',
-    email: 'TUMO поштасы',
+    email: 'Оқушының TUMO поштасы',
     password: 'Уақытша құпия сөз',
     show: 'Көрсету',
     hide: 'Жасыру',

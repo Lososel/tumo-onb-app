@@ -45,7 +45,7 @@ const ru = {
     coach: 'Коуч',
     coachEmail: 'Email коуча',
     room: 'Кабинет',
-    email: 'Почта TUMO',
+    email: 'Почта TUMO ученика',
     password: 'Временный пароль',
     show: 'Показать',
     hide: 'Скрыть',
