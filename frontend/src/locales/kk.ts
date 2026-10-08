@@ -4,6 +4,7 @@ import type { Messages } from './ru'
 const kk: Messages = {
   meta: { title: 'TUMO Astana — оқу кестесі' },
   lang: { ru: 'РУС', kk: 'ҚАЗ', label: 'Сайт тілі' },
+  coming_soon: 'Жақында пайда болады',
 
   search: {
     title: 'TUMO Astana-ға қош келдіңіз!\u00a0👋',
@@ -51,7 +52,6 @@ const kk: Messages = {
     copy: 'Көшіру',
     copied: 'Көшірілді',
     passwordHint: 'Алғашқы сабақта кіру үшін поштаны және уақытша құпия сөзді пайдаланыңыз — сол жерде құпия сөзді ауыстыру қажет болады.',
-    notSet: 'Нақтылануда',
     whatsapp: {
       title: 'WhatsApp қауымдастығы',
       join: 'Қосылу',

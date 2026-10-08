@@ -109,7 +109,7 @@ def test_lookup_from_batch_csv(csv_client, query):
                 "coach_name": "Назым",  # resolved via the coach directory
                 "coach_email": "rysbayeva.nazym@tumo.center",
                 "room": "WR 5, 3 этаж",
-                "default_email": "Уточняется",  # tumo.example is not @tumo.world: withheld
+                "default_email": "Скоро появится",  # tumo.example is not @tumo.world: withheld
                 "temp_password": None,
                 "status_code": "waitlist",
                 "status": None,

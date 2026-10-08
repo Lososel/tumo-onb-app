@@ -31,7 +31,7 @@ const community = computed(() =>
   props.learner.status_code === 'waitlist' ? null : communityFor(props.learner.schedule),
 )
 
-// The API's "Уточняется" placeholder becomes null here so it renders as the localized t.card.notSet.
+// The API's "Скоро появится" placeholder becomes null here so it renders as the localized t.coming_soon.
 const known = (v: string | null) => (v === PENDING ? null : v)
 
 const fields = computed(() => [
@@ -89,7 +89,7 @@ async function copyPassword() {
             :href="`mailto:${f.value}`"
             class="font-medium text-brand-500 hover:underline"
           >{{ f.value }}</a>
-          <template v-else>{{ f.value || t.card.notSet }}</template>
+          <template v-else>{{ f.value || t.coming_soon }}</template>
         </dd>
       </div>
     </dl>

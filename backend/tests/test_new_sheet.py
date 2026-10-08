@@ -180,7 +180,7 @@ def test_xlsx_end_to_end_with_fallback_fields(monkeypatch, tmp_path):
                         google_credentials_json=CREDS, cache_file=tmp_path / "c.json")
     with TestClient(create_app(settings)) as c:
         card = c.post("/api/schedule/lookup", json={"query": "алия жумабек"}).json()["results"][0]
-        assert card["room"] == card["default_email"] == "Уточняется"
+        assert card["room"] == card["default_email"] == "Скоро появится"
         assert card["temp_password"] is None
         waiting = c.post("/api/schedule/lookup", json={"query": "кузнецов даниил"}).json()["results"][0]
         assert waiting["status_code"] == "waitlist"
@@ -238,7 +238,7 @@ def test_zone_added_in_column_j(zone_header):
     assert ws.cell(row=1, column=10).column_letter == "J"
     maxim, aliya = parse_tabs(xlsx_to_tabs(buf.getvalue()), source="test").learners
     assert maxim.room == "WR 5, 3 этаж"
-    assert aliya.room == ""  # empty cell -> API answers "Уточняется"
+    assert aliya.room == ""  # empty cell -> API answers "Скоро появится"
 
 
 def _bloated_workbook(dimension: str, blank_rows: int) -> bytes:

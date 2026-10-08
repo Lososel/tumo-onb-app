@@ -98,8 +98,8 @@ def test_api_fallbacks_for_missing_columns(client):
                 "schedule": "Понедельник, Четверг : 10:30–12:30",
                 "coach_name": "Назым",
                 "coach_email": "rysbayeva.nazym@tumo.center",
-                "room": "Уточняется",
-                "default_email": "Уточняется",
+                "room": "Скоро появится",
+                "default_email": "Скоро появится",
                 "temp_password": None,  # no password column, even with EXPOSE_TEMP_PASSWORD on
                 "status_code": "active_schedule",
                 "status": None,

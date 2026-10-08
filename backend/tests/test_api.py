@@ -40,7 +40,7 @@ def test_lookup_returns_schedule_card(make_client):
             "coach_name": "Aliya",  # not in the coach directory: shown as written, no email
             "coach_email": None,
             "room": "Lab 2",
-            "default_email": "Уточняется",  # example.com is not @tumo.world: withheld
+            "default_email": "Скоро появится",  # example.com is not @tumo.world: withheld
             "temp_password": None,  # EXPOSE_TEMP_PASSWORD defaults to off
             "status_code": "active_schedule",
             "status": None,

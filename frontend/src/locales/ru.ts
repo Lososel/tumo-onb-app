@@ -3,6 +3,8 @@ import type { ChecklistIconName } from '../components/ChecklistIcon.vue'
 const ru = {
   meta: { title: 'TUMO Astana — график обучения' },
   lang: { ru: 'РУС', kk: 'ҚАЗ', label: 'Язык сайта' },
+  // Placeholder for anything not available yet (e.g. room or email not filled in).
+  coming_soon: 'Скоро появится',
 
   search: {
     title: 'Добро пожаловать в TUMO\u00a0Astana!\u00a0👋',
@@ -50,7 +52,6 @@ const ru = {
     copy: 'Копировать',
     copied: 'Скопировано',
     passwordHint: 'Используйте почту и временный пароль для входа на первом занятии — там же пароль нужно будет сменить.',
-    notSet: 'Уточняется',
     whatsapp: {
       title: 'Сообщество в WhatsApp',
       join: 'Присоединиться',

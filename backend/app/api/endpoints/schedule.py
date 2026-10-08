@@ -53,7 +53,7 @@ def rate_limit(request: Request) -> None:
     request.app.state.limiter.check(client_ip(request))
 
 
-PENDING = "Уточняется"  # shown for room/email until the sheet has the column (or the cell is filled)
+PENDING = "Скоро появится"  # shown for room/email until the sheet has the column (or the cell is filled)
 
 
 def _student_email(email: str, domains: tuple[str, ...]) -> str:
@@ -71,7 +71,7 @@ def to_card(
 ) -> ScheduleCard:
     """Map an internal record to the public card. tumo_id and extra_info are never copied.
 
-    room and default_email fall back to "Уточняется" when the sheet has no such column yet
+    room and default_email fall back to "Скоро появится" when the sheet has no such column yet
     or the cell is empty; temp_password falls back to null.
     """
     # Sheet's short coach name ("Alinur") -> full name + work email from data/coaches.json.

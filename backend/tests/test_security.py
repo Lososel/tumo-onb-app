@@ -82,7 +82,7 @@ def test_only_tumo_world_student_emails_are_shown(make_client):
     with make_client() as c:
         assert lookup(c, "Иванова Анна").json()["results"][0]["default_email"] == "anna.ivanova@tumo.world"
         # A personal Gmail typed into the TUMO-email column is withheld, not published.
-        assert lookup(c, "Смирнов Олег").json()["results"][0]["default_email"] == "Уточняется"
+        assert lookup(c, "Смирнов Олег").json()["results"][0]["default_email"] == "Скоро появится"
 
 
 def test_student_email_domains_are_configurable(make_client, monkeypatch):
