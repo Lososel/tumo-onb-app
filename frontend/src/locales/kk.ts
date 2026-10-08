@@ -43,7 +43,7 @@ const kk: Messages = {
   card: {
     schedule: 'Оқу кестесі',
     coach: 'Коуч',
-    coachEmail: 'Коучтың email-ы',
+    coachEmail: 'Коуч поштасы',
     room: 'Кабинет',
     email: 'Оқушының TUMO поштасы',
     password: 'Уақытша құпия сөз',

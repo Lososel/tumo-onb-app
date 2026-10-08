@@ -43,7 +43,7 @@ const ru = {
   card: {
     schedule: 'График обучения',
     coach: 'Коуч',
-    coachEmail: 'Email коуча',
+    coachEmail: 'Почта коуча',
     room: 'Кабинет',
     email: 'Почта TUMO ученика',
     password: 'Временный пароль',
