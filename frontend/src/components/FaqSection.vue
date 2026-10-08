@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { t } from '../i18n'
-import ComingSoonBadge from './ComingSoonBadge.vue'
 import SectionTitle from './SectionTitle.vue'
 </script>
 
@@ -18,15 +17,7 @@ import SectionTitle from './SectionTitle.vue'
             aria-hidden="true"
           >+</span>
         </summary>
-        <div class="px-1 pb-6 leading-relaxed text-slate-600">
-          <p class="whitespace-pre-line">{{ item.a }}</p>
-          <ul v-if="'upcoming' in item && item.upcoming" class="mt-3 space-y-2">
-            <li v-for="(feature, j) in item.upcoming" :key="j" class="flex flex-wrap items-center gap-2">
-              {{ feature }}
-              <ComingSoonBadge />
-            </li>
-          </ul>
-        </div>
+        <p class="px-1 pb-6 leading-relaxed whitespace-pre-line text-slate-600">{{ item.a }}</p>
       </details>
     </div>
   </section>
