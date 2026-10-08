@@ -80,6 +80,34 @@ class CsvSource:
         return out
 
 
+_DISABLED = {"SERVICE_DISABLED", "accessNotConfigured"}
+
+
+def is_google_error(exc: BaseException) -> bool:
+    """A gspread APIError (checked by shape, so gspread needn't be importable here)."""
+    return isinstance(getattr(exc, "error", None), dict) and isinstance(getattr(exc, "code", None), int)
+
+
+def google_error(exc) -> tuple[str, set[str]]:
+    """'HTTP 403 PERMISSION_DENIED (SERVICE_DISABLED)' from a gspread APIError, plus the reasons.
+
+    Only the code, status and reason identifiers are kept: Google's free-text message can carry
+    project numbers and URLs, and this ends up on the public /api/health endpoint.
+    """
+    error = getattr(exc, "error", None) or {}
+    reasons: set[str] = set()
+    for key in ("details", "errors"):
+        for item in error.get(key) or []:
+            if isinstance(item, dict) and isinstance(item.get("reason"), str):
+                reasons.add(item["reason"])
+    parts = [f"HTTP {getattr(exc, 'code', '?')}"]
+    if isinstance(error.get("status"), str) and error["status"].isupper():
+        parts.append(error["status"])
+    if reasons:
+        parts.append(f"({', '.join(sorted(reasons))})")
+    return " ".join(parts), reasons
+
+
 class GoogleSheetsSource:
     """Reads a spreadsheet from Google: a native Google Sheet *or* an .xlsx file stored in Drive.
 
@@ -141,18 +169,51 @@ class GoogleSheetsSource:
         return self._client
 
     def _mime_type(self, client) -> str | None:
-        """File type via the Drive API, or None if Drive isn't available (then assume a Sheet)."""
+        """File type via the Drive API. A clear Google answer (API disabled, file not shared) is
+        reported as is; only other failures fall back to assuming a native Sheet."""
         try:
             resp = client.http_client.request(
                 "get", self.DRIVE_FILES + self.sheet_id,
                 params={"fields": "mimeType", "supportsAllDrives": "true"},
             )
             return resp.json().get("mimeType")
-        except Exception as exc:  # Drive API disabled / not shared: fall back to the Sheets path
-            log.info("Drive metadata unavailable (%s); treating the id as a Google Sheet", type(exc).__name__)
+        except Exception as exc:
+            if not is_google_error(exc):  # network trouble etc.: try the Sheets path
+                log.info("Drive metadata unavailable (%s); treating the id as a Google Sheet",
+                         type(exc).__name__)
+                return None
+            summary, reasons = google_error(exc)
+            if reasons & _DISABLED:
+                raise SheetsConfigError(
+                    f"Drive API: {summary}. Enable the Google Drive API in the service account's "
+                    "Google Cloud project (APIs & Services → Library → Google Drive API)"
+                ) from None
+            if exc.code == 404:
+                raise SheetsConfigError(
+                    f"Drive API: {summary}. Check GOOGLE_SHEET_ID and share the file with the "
+                    "service account's email"
+                ) from None
+            log.info("Drive metadata unavailable (%s); treating the id as a Google Sheet", summary)
             return None
 
     def _fetch_sheet(self, client) -> RawTabs:
+        try:
+            return self._fetch_sheet_values(client)
+        except Exception as exc:
+            if not is_google_error(exc):
+                raise
+            summary, reasons = google_error(exc)
+            hint = ""
+            if reasons & _DISABLED:
+                hint = ". Enable the Google Sheets API in the service account's Google Cloud project"
+            elif exc.code == 400:  # "This operation is not supported for this document"
+                hint = (". The file is not a native Google Sheet (e.g. an .xlsx): enable the Google "
+                        "Drive API in the service account's Google Cloud project so it can be downloaded")
+            elif exc.code in (403, 404):
+                hint = ". Share the file with the service account's email"
+            raise SheetsConfigError(f"Sheets API: {summary}{hint}") from None
+
+    def _fetch_sheet_values(self, client) -> RawTabs:
         spreadsheet = client.open_by_key(self.sheet_id)
         # Picks up newly added tabs; with TAB_FILTER only the matching tabs are downloaded,
         # so other batches' data never reaches this server.
@@ -166,9 +227,14 @@ class GoogleSheetsSource:
         }
 
     def _fetch_xlsx(self, client) -> RawTabs:
-        resp = client.http_client.request(
-            "get", self.DRIVE_FILES + self.sheet_id, params={"alt": "media", "supportsAllDrives": "true"}
-        )
+        try:
+            resp = client.http_client.request(
+                "get", self.DRIVE_FILES + self.sheet_id, params={"alt": "media", "supportsAllDrives": "true"}
+            )
+        except Exception as exc:
+            if not is_google_error(exc):
+                raise
+            raise SheetsConfigError(f"Drive download: {google_error(exc)[0]}") from None
         return xlsx_to_tabs(resp.content, self.tab_filter)
 
     def fetch(self) -> RawTabs:

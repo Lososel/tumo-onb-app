@@ -305,3 +305,94 @@ def test_data_after_a_short_gap_is_kept_but_a_long_gap_ends_the_tab(monkeypatch)
 
     assert sheets._xlsx_grid(Sheet()) == [["ФИО ребенка", "Расписание"], ["Иванова Анна", "Пн"],
                                           ["Смирнов Олег", "Вт"]]
+
+
+# ---------- Google API errors name the failing API and the fix ----------
+
+
+def _api_error(code, status, reason, message="Google's free text with project 123456789 and a URL"):
+    import requests
+    from gspread.exceptions import APIError
+
+    resp = requests.Response()
+    resp.status_code = code
+    resp._content = json.dumps({"error": {
+        "code": code, "message": message, "status": status,
+        "details": [{"@type": "type.googleapis.com/google.rpc.ErrorInfo", "reason": reason}],
+    }}).encode()
+    return APIError(resp)
+
+
+def install_failing_gspread(monkeypatch, drive_error=None, sheets_error=None, download_error=None):
+    class HTTP:
+        def request(self, method, url, params=None, **_):
+            if params and params.get("alt") == "media":
+                raise download_error
+            if drive_error:
+                raise drive_error
+            return FakeResponse({"mimeType": GoogleSheetsSource.XLSX_MIME})
+
+    class Client:
+        http_client = HTTP()
+
+        def set_timeout(self, _):
+            pass
+
+        def open_by_key(self, key):
+            raise sheets_error
+
+    monkeypatch.setitem(sys.modules, "gspread",
+                        types.SimpleNamespace(service_account_from_dict=lambda info, scopes: Client()))
+
+
+def test_drive_api_disabled_is_reported_with_the_fix(monkeypatch):
+    # The Sheets path would only fail too (an .xlsx isn't a Sheet), hiding the real cause.
+    install_failing_gspread(
+        monkeypatch,
+        drive_error=_api_error(403, "PERMISSION_DENIED", "SERVICE_DISABLED"),
+        sheets_error=_api_error(400, "FAILED_PRECONDITION", "x"),
+    )
+    with pytest.raises(SheetsConfigError) as err:
+        GoogleSheetsSource(None, "id", credentials_json=CREDS).fetch()
+    msg = str(err.value)
+    assert msg.startswith("Drive API: HTTP 403 PERMISSION_DENIED (SERVICE_DISABLED)")
+    assert "Enable the Google Drive API" in msg
+    assert "123456789" not in msg and "http" not in msg.lower().replace("http 403", "")
+
+
+def test_xlsx_opened_through_sheets_api_explains_drive_is_needed(monkeypatch):
+    install_failing_gspread(
+        monkeypatch,
+        drive_error=_api_error(403, "PERMISSION_DENIED", "insufficientPermissions"),
+        sheets_error=_api_error(400, "FAILED_PRECONDITION", "FAILED_PRECONDITION",
+                                "This operation is not supported for this document"),
+    )
+    with pytest.raises(SheetsConfigError, match=r"Sheets API: HTTP 400 FAILED_PRECONDITION.*not a native"):
+        GoogleSheetsSource(None, "id", credentials_json=CREDS).fetch()
+
+
+def test_file_not_shared_is_reported(monkeypatch):
+    install_failing_gspread(monkeypatch, drive_error=_api_error(404, "NOT_FOUND", "notFound"))
+    with pytest.raises(SheetsConfigError, match="Drive API: HTTP 404 NOT_FOUND.*share the file"):
+        GoogleSheetsSource(None, "id", credentials_json=CREDS).fetch()
+
+
+def test_download_error_is_reported(monkeypatch):
+    error = _api_error(403, "PERMISSION_DENIED", "cannotDownloadFile")
+    install_failing_gspread(monkeypatch, download_error=error)
+    with pytest.raises(SheetsConfigError, match=r"Drive download: HTTP 403 PERMISSION_DENIED"):
+        GoogleSheetsSource(None, "id", credentials_json=CREDS).fetch()
+
+
+def test_google_config_errors_reach_health(monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+
+    from app.core.config import Settings
+    from app.main import create_app
+
+    install_failing_gspread(monkeypatch, drive_error=_api_error(403, "PERMISSION_DENIED", "SERVICE_DISABLED"))
+    settings = Settings(data_source="google", google_sheet_id="id", google_credentials_json=CREDS,
+                        cache_file=tmp_path / "c.json")
+    with TestClient(create_app(settings)) as c:
+        error = c.get("/api/health").json()["last_sync_error"]
+    assert error.startswith("SheetsConfigError: Drive API: HTTP 403") and "Google Drive API" in error
