@@ -3,6 +3,8 @@ import type { ChecklistIconName } from '../components/ChecklistIcon.vue'
 const ru = {
   meta: { title: 'TUMO Astana — график обучения' },
   lang: { ru: 'РУС', kk: 'ҚАЗ', label: 'Язык сайта' },
+  // Official label for any feature that isn't available yet (see ComingSoonBadge).
+  coming_soon: 'Скоро появится',
 
   search: {
     title: 'Добро пожаловать в TUMO\u00a0Astana!\u00a0👋',
@@ -157,7 +159,8 @@ const ru = {
       },
       {
         q: "На каком языке проходит обучение?",
-        a: "Обучение проходит на русском и английском языках. В скором времени также появится обучение на казахском языке.",
+        a: "Обучение проходит на русском и английском языках.",
+        upcoming: ["Обучение на казахском языке"],
       },
       {
         q: "Будет ли сертификат после окончания?",
