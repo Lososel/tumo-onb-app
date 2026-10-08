@@ -1,7 +1,7 @@
 import type { ChecklistIconName } from '../components/ChecklistIcon.vue'
 
 const ru = {
-  meta: { title: 'TUMO Astana — график обучения' },
+  meta: { title: 'TUMO Astana' },
   lang: { ru: 'РУС', kk: 'ҚАЗ', label: 'Язык сайта' },
   // Placeholder for anything not available yet (e.g. room or email not filled in).
   coming_soon: 'Скоро появится',

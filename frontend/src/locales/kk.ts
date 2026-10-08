@@ -2,7 +2,7 @@ import type { ChecklistIconName } from '../components/ChecklistIcon.vue'
 import type { Messages } from './ru'
 
 const kk: Messages = {
-  meta: { title: 'TUMO Astana — оқу кестесі' },
+  meta: { title: 'TUMO Astana' },
   lang: { ru: 'РУС', kk: 'ҚАЗ', label: 'Сайт тілі' },
   coming_soon: 'Жақында пайда болады',
 
