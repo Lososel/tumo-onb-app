@@ -37,7 +37,7 @@ DIRECTORY = CoachDirectory.load(COACHES_FILE)
         ("Құрақ Дана", "Дана Құрақ", "kurak.dana@tumo.center"),
         ("Ахметова Дана", "Дана Ахметова", "akhmetova.dana@tumo.center"),
         ("Aruzhan Kh.", "Аружан Хамзина", "khamzina.aruzhan@tumo.center"),
-        ("Aruzhan T", "Аружан Торебек", "torebek.aruzhan@tumo.center"),
+        ("Aruzhan T", "Аружан Төребек", "torebek.aruzhan@tumo.center"),
         ("Мырзахмет Аружан", "Аружан Мырзахмет", "aruzhan.myrzakhmet@tumo.center"),
         ("Kurak.Dana@tumo.center", "Дана Құрақ", "kurak.dana@tumo.center"),
     ],
@@ -107,7 +107,7 @@ def test_display_is_first_name_with_surname_only_for_shared_first_names():
     danas = sorted(v for v in shown.values() if v.startswith("Дана"))
     aruzhans = sorted(v for v in shown.values() if v.startswith("Аружан"))
     assert danas == ["Дана Ахметова", "Дана Телжан", "Дана Құрақ"]
-    assert aruzhans == ["Аружан Мырзахмет", "Аружан Торебек", "Аружан Хамзина"]
+    assert aruzhans == ["Аружан Мырзахмет", "Аружан Төребек", "Аружан Хамзина"]
     assert sum(" " in v for v in shown.values()) == 6  # only the shared first names get a surname
 
 
