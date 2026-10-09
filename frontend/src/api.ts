@@ -1,30 +1,31 @@
 import axios from 'axios'
 
-export interface SelfStudy {
-  days: string
-  time: string
-}
+export type StatusCode = 'active_schedule' | 'waitlist' | 'schedule_pending' | 'schedule_changed' | 'coach_changed'
 
-export interface Workshop {
-  name: string
-  teacher: string | null
+/** Placeholder the API sends for room/email the sheet doesn't have yet; shown localized. */
+export const PENDING = 'Скоро появится'
+
+/** One learner's schedule card, as returned by POST /api/schedule/lookup. */
+export interface Learner {
+  full_name: string
+  schedule: string | null
+  coach_name: string | null
+  /** coach's work email from the coach directory; null if unknown/ambiguous */
+  coach_email: string | null
   room: string | null
-  days: string
-  time: string
+  default_email: string | null
+  /** null unless the backend has EXPOSE_TEMP_PASSWORD enabled */
+  temp_password: string | null
+  status_code: StatusCode | 'other'
+  /** raw sheet text, shown as the badge when status_code is 'other' */
+  status: string | null
 }
 
-export interface StudentDashboard {
-  first_name: string
-  last_name: string
-  self_study: SelfStudy | null
-  workshops: Workshop[]
-  links: { whatsapp: string | null }
-}
+export type LookupStatus = 'ok' | 'not_found' | 'inactive' | 'need_full_name' | 'too_many' | 'unavailable'
 
 export interface LookupResponse {
-  status: 'ok' | 'not_found' | 'inactive'
-  message: string
-  students: StudentDashboard[]
+  status: LookupStatus
+  results: Learner[]
   data_updated_at: string | null
 }
 
@@ -33,20 +34,18 @@ const http = axios.create({
   timeout: 10_000,
 })
 
-/** Uses POST so the student's name never appears in URLs or server access logs. */
-export async function lookupStudent(firstName: string, lastName: string): Promise<LookupResponse> {
-  const { data } = await http.post<LookupResponse>('/api/students/lookup', {
-    first_name: firstName.trim(),
-    last_name: lastName.trim(),
-  })
+/** POST keeps the learner's name out of URLs and server access logs. */
+export async function lookupSchedule(query: string): Promise<LookupResponse> {
+  const { data } = await http.post<LookupResponse>('/api/schedule/lookup', { query: query.trim() })
   return data
 }
 
-export function errorMessage(err: unknown): string {
+export type ErrorKind = 'rateLimited' | 'unavailable' | 'network'
+
+export function errorKind(err: unknown): ErrorKind {
   if (axios.isAxiosError(err)) {
-    if (err.response?.status === 429) return 'Too many tries — please wait a minute and try again.'
-    if (err.response?.status === 503) return 'The schedule is being updated. Please try again in a moment.'
-    if (err.response?.status === 422) return 'Please enter both your first and last name.'
+    if (err.response?.status === 429) return 'rateLimited'
+    if (err.response?.status === 503) return 'unavailable'
   }
-  return "We couldn't reach TUMO right now. Check your connection and try again."
+  return 'network'
 }

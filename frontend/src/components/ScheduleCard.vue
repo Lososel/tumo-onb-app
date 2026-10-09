@@ -1,45 +1,161 @@
 <script setup lang="ts">
-defineProps<{
-  icon: string
-  label: string
-  title: string
-  days: string
-  time: string
-  details?: string[]
-  accent?: 'brand' | 'sky'
-}>()
+import { computed, ref, useId, watch } from 'vue'
+import { PENDING, type Learner } from '../api'
+import { coachName } from '../coaches'
+import { locale, localized, t } from '../i18n'
+import { titleCase } from '../names'
+import { communityFor } from '../whatsapp'
+
+const props = defineProps<{ learner: Learner }>()
+
+const BADGE: Record<string, string> = {
+  active_schedule: 'bg-emerald-50 text-emerald-700',
+  waitlist: 'bg-amber-50 text-amber-700',
+  schedule_pending: 'bg-slate-100 text-slate-600',
+  schedule_changed: 'bg-amber-50 text-amber-700',
+  coach_changed: 'bg-sky-50 text-sky-700',
+}
+
+const badge = computed(() => {
+  const { status_code: code, status } = props.learner
+  if (code !== 'other') return { text: t.value.status[code], cls: BADGE[code] }
+  return status ? { text: status, cls: 'bg-slate-100 text-slate-600' } : null
+})
+
+const statusNote = computed(() => {
+  const code = props.learner.status_code
+  return code !== 'other' ? t.value.statusNote[code] : ''
+})
+
+// WhatsApp community for the learner's slot. Hidden on the waitlist: they don't have that slot yet.
+const community = computed(() =>
+  props.learner.status_code === 'waitlist' ? null : communityFor(props.learner.schedule),
+)
+
+// The API's "Скоро появится" placeholder becomes null here so it renders as the localized t.coming_soon.
+const known = (v: string | null) => (v === PENDING ? null : v)
+
+const fields = computed(() => [
+  // Two columns: schedule | room, coach | coach email, TUMO email.
+  { label: t.value.card.schedule, value: localized(props.learner.schedule) },
+  { label: t.value.card.room, value: known(props.learner.room) },
+  { label: t.value.card.coach, value: coachName(props.learner.coach_name, locale.value) },
+  { label: t.value.card.coachEmail, value: props.learner.coach_email, mailto: true },
+  { label: t.value.card.email, value: known(props.learner.default_email) },
+])
+
+// Temporary password: masked until the learner asks to see it; re-masked for every new result.
+const passwordLabelId = useId()
+const revealed = ref(false)
+const copied = ref(false)
+watch(
+  () => props.learner,
+  () => {
+    revealed.value = false
+    copied.value = false
+  },
+)
+
+async function copyPassword() {
+  if (!props.learner.temp_password) return
+  try {
+    await navigator.clipboard.writeText(props.learner.temp_password)
+    copied.value = true
+    setTimeout(() => (copied.value = false), 2000)
+  } catch {
+    revealed.value = true // clipboard blocked: show it so it can be copied by hand
+  }
+}
 </script>
 
 <template>
-  <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-    <div class="flex items-start gap-3">
-      <div
-        class="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-xl"
-        :class="accent === 'sky' ? 'bg-sky-100' : 'bg-brand-100'"
-        aria-hidden="true"
+  <article class="rounded-3xl border-2 border-ink bg-white p-5 sm:p-8">
+    <div class="flex flex-col-reverse items-start gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <h3 class="font-display text-xl leading-snug font-black text-ink sm:text-2xl">{{ titleCase(learner.full_name) }}</h3>
+      <span
+        v-if="badge"
+        class="shrink-0 rounded-full px-3.5 py-1.5 text-xs font-extrabold tracking-wide uppercase"
+        :class="badge.cls"
       >
-        {{ icon }}
-      </div>
-      <div class="min-w-0 flex-1">
-        <p
-          class="text-xs font-semibold tracking-wide uppercase"
-          :class="accent === 'sky' ? 'text-sky-700' : 'text-brand-700'"
-        >
-          {{ label }}
-        </p>
-        <h3 class="mt-0.5 text-base font-semibold text-slate-900">{{ title }}</h3>
-        <p v-if="details?.length" class="mt-0.5 text-sm text-slate-500">{{ details.join(' · ') }}</p>
-      </div>
+        {{ badge.text }}
+      </span>
     </div>
-    <dl class="mt-4 grid grid-cols-2 gap-2 text-sm">
-      <div class="rounded-xl bg-slate-50 px-3 py-2">
-        <dt class="text-xs text-slate-500">📅 Days</dt>
-        <dd class="font-medium text-slate-900">{{ days || '—' }}</dd>
-      </div>
-      <div class="rounded-xl bg-slate-50 px-3 py-2">
-        <dt class="text-xs text-slate-500">🕒 Time</dt>
-        <dd class="font-medium text-slate-900">{{ time || '—' }}</dd>
+
+    <dl class="mt-5 grid gap-x-8 gap-y-5 sm:mt-6 sm:grid-cols-2">
+      <div v-for="f in fields" :key="f.label" class="min-w-0">
+        <dt class="text-xs font-bold tracking-wider text-slate-500 uppercase">{{ f.label }}</dt>
+        <dd class="mt-1 text-lg font-semibold break-words text-ink">
+          <a
+            v-if="f.mailto && f.value"
+            :href="`mailto:${f.value}`"
+            class="font-medium text-brand-500 hover:underline"
+          >{{ f.value }}</a>
+          <template v-else>{{ f.value || t.coming_soon }}</template>
+        </dd>
       </div>
     </dl>
+
+    <div v-if="learner.temp_password" class="mt-6 rounded-2xl border border-brand-200 bg-brand-50 p-4 sm:p-5">
+      <p :id="passwordLabelId" class="text-xs font-bold tracking-wider text-slate-500 uppercase">
+        {{ t.card.password }}
+      </p>
+      <div class="mt-2 flex flex-wrap items-center gap-2 sm:gap-3">
+        <code
+          :aria-labelledby="passwordLabelId"
+          class="w-full min-w-0 overflow-x-auto rounded-xl bg-white px-4 py-2.5 font-mono text-lg tracking-wider whitespace-nowrap text-ink sm:w-auto sm:flex-1"
+        >{{ revealed ? learner.temp_password : '••••••••' }}</code>
+        <button
+          type="button"
+          :aria-pressed="revealed"
+          class="rounded-full bg-ink px-4 py-2.5 text-sm font-bold text-white transition hover:bg-black"
+          @click="revealed = !revealed"
+        >
+          {{ revealed ? t.card.hide : t.card.show }}
+        </button>
+        <button
+          type="button"
+          class="rounded-full border-2 border-ink px-4 py-2 text-sm font-bold text-ink transition hover:bg-ink hover:text-white"
+          @click="copyPassword"
+        >
+          {{ copied ? t.card.copied : t.card.copy }}
+        </button>
+      </div>
+      <p class="mt-3 text-sm text-slate-600">{{ t.card.passwordHint }}</p>
+    </div>
+
+    <p v-if="statusNote" class="mt-6 rounded-2xl bg-sky-50 px-5 py-3.5 text-[0.95rem] text-slate-700">
+      {{ statusNote }}
+    </p>
+
+    <div
+      v-if="community"
+      class="mt-6 flex flex-col items-start gap-4 rounded-2xl border-2 border-dashed border-brand-400 p-4 sm:flex-row sm:items-center sm:gap-6 sm:p-5"
+    >
+      <img
+        :src="`/whatsapp/${community.key}.svg`"
+        :alt="t.card.whatsapp.qrAlt"
+        width="120"
+        height="120"
+        class="h-28 w-28 shrink-0 rounded-lg bg-white sm:h-32 sm:w-32"
+      />
+      <div class="min-w-0">
+        <p class="font-display text-lg leading-snug font-black text-ink">
+          {{ t.card.whatsapp.title }}:
+          <span class="whitespace-nowrap">{{ t.card.whatsapp.days[community.days] }} {{ community.start }}–{{ community.end }}</span>
+        </p>
+        <a
+          :href="community.url"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="mt-1 block text-sm break-all text-brand-500 hover:underline sm:text-base"
+        >{{ community.url }}</a>
+        <a
+          :href="community.url"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="mt-3 inline-flex rounded-full bg-[#5bc96f] px-6 py-2.5 font-bold text-white transition hover:bg-[#49b95d]"
+        >{{ t.card.whatsapp.join }}</a>
+      </div>
+    </div>
   </article>
 </template>

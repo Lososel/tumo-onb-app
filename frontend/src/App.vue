@@ -1,24 +1,22 @@
 <script setup lang="ts">
-import { RouterLink, RouterView } from 'vue-router'
+import { ref } from 'vue'
+import AppHeader from './components/AppHeader.vue'
+import FaqSection from './components/FaqSection.vue'
+import ScheduleSearch from './components/ScheduleSearch.vue'
+import StudentChecklist from './components/StudentChecklist.vue'
+import SupportCard from './components/SupportCard.vue'
+import { t } from './i18n'
+
+const query = ref('')
 </script>
 
 <template>
-  <div class="mx-auto flex min-h-dvh w-full max-w-md flex-col px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
-    <header class="flex items-center justify-between py-4">
-      <RouterLink to="/" class="flex items-center gap-2" aria-label="TUMO Astana home">
-        <span class="grid h-9 w-9 place-items-center rounded-xl bg-brand-500 text-lg font-bold text-white">T</span>
-        <span class="text-base font-semibold tracking-tight text-slate-900">TUMO Astana</span>
-      </RouterLink>
-      <RouterLink
-        to="/guide"
-        class="rounded-full px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
-        active-class="bg-slate-100 text-slate-900"
-      >
-        Guide
-      </RouterLink>
-    </header>
-    <main class="flex flex-1 flex-col">
-      <RouterView />
-    </main>
-  </div>
+  <AppHeader />
+  <main class="mx-auto max-w-4xl space-y-16 px-4 py-10 sm:space-y-20 sm:px-6 sm:py-16">
+    <ScheduleSearch v-model="query" />
+    <StudentChecklist />
+    <FaqSection />
+    <SupportCard :learner-name="query" />
+  </main>
+  <footer class="px-4 pt-4 pb-10 text-center text-sm text-slate-500 sm:pb-14">{{ t.footer }}</footer>
 </template>
