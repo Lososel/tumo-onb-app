@@ -1,0 +1,68 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+#
+# One Docker web service: the Dockerfile builds the Vue frontend and serves it together with
+# the FastAPI backend from a single uvicorn process.
+#
+# After creating the Blueprint in the Render dashboard:
+#   1. In Google Cloud (project of the service account): enable the Google Sheets API AND the
+#      Google Drive API. Share the file with the service account's email (Viewer is enough).
+#   2. Service → Environment → Secret Files: add `credentials.json` with the Google service
+#      account key (Render mounts it at /etc/secrets/credentials.json), or paste the JSON
+#      into GOOGLE_CREDENTIALS_JSON.
+#   3. Optional: copy the generated ADMIN_TOKEN to force a re-sync after editing the sheet:
+#        curl -X POST -H "X-Admin-Token: <token>" https://<service>.onrender.com/api/admin/refresh
+
+services:
+  - type: web
+    name: tumo-astana-schedule
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    region: frankfurt # closest Render region to Kazakhstan
+    # Free instances sleep after ~15 min idle, so the first visitor waits for a cold start and
+    # the background sheet sync pauses while asleep. Use "starter" for an always-on service.
+    plan: free
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: DATA_SOURCE
+        value: google
+      # Live workbook "MAIN_ОБЩИЙ_1,2,3 БАТЧ_ВСЕХ_УЧЕНИКОВ_SL" — an .xlsx stored in Google Drive
+      # (native Google Sheet ids work too; the type is auto-detected). Not public: readable only
+      # by accounts it is shared with, including the service account. Requires the Google Drive
+      # API to be enabled in the service account's Cloud project.
+      - key: GOOGLE_SHEET_ID
+        value: 1qcmLsXYRvu6Pf0ghM17V0dvq3sUuBDqm
+      - key: GOOGLE_CREDENTIALS_FILE
+        value: /etc/secrets/credentials.json # Render secret file (see step 2 above)
+      # Alternative to the secret file: paste the whole service-account JSON here. Takes
+      # precedence when set; escaped "\n" in the private key is handled. Leave empty to use the file.
+      - key: GOOGLE_CREDENTIALS_JSON
+        sync: false
+      # If the sheet is unreachable and nothing is cached yet, lookups answer "unavailable"
+      # (HTTP 200). "true" serves the mock dataset instead — demo/staging only: in production
+      # fake data makes every real search say "not found".
+      - key: FALLBACK_TO_MOCK
+        value: "false"
+      # All tabs are discovered automatically: any tab with a student header row (ФИО ребенка /
+      # ФИО / Full Name) is parsed, others (summaries, notes) are skipped. To restrict, add
+      # TAB_FILTER (e.g. "4 поток" matches "4 поток" and "4 поток (лист ожидания)").
+      - key: SYNC_INTERVAL_SECONDS
+        value: "300"
+      # Anti-scraping: max lookups per visitor IP per minute (HTTP 429 beyond that). Everyone on
+      # the centre's Wi-Fi shares one public IP, so this is per room, not per student; the
+      # two-full-words rule already stops broad sweeps. (The code default is 5.)
+      - key: LOOKUP_RATE_LIMIT_PER_MINUTE
+        value: "20"
+      # Render's proxy appends the client IP to X-Forwarded-For; rate limiting uses that entry
+      # instead of the proxy's address (otherwise all visitors would share one limit).
+      # Verify after deploy: the log line "First lookup: X-Forwarded-For has N entries" should
+      # show N = PROXY_HOPS; otherwise set PROXY_HOPS to N.
+      - key: PROXY_HOPS
+        value: "1"
+      # Temporary passwords on the schedule card. Keep "false" outside onboarding: while "true",
+      # anyone who knows a learner's full name can see their temporary password.
+      - key: EXPOSE_TEMP_PASSWORD
+        value: "false"
+      - key: ADMIN_TOKEN
+        generateValue: true

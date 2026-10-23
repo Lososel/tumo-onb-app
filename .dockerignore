@@ -7,3 +7,6 @@ backend/data/cache
 backend/.env
 backend/credentials.json
 .git
+backend/data/csv
+backend/data/*.csv
+.claude

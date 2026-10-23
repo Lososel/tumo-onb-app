@@ -1,5 +1,5 @@
 {
-  "name": "tumo-astana-dashboard",
+  "name": "tumo-astana-schedule",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -11,8 +11,7 @@
   },
   "dependencies": {
     "axios": "^1.20.0",
-    "vue": "^3.5.43",
-    "vue-router": "^5.3.1"
+    "vue": "^3.5.43"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
