@@ -31,8 +31,21 @@ class LearnerRecord(BaseModel):
         return self.status_code != "inactive"
 
 
+class TabStats(BaseModel):
+    """What one sheet tab produced during a sync — counts only, never names."""
+
+    rows: int = 0  # non-empty rows read from the tab
+    header_row: int | None = None  # 1-based row of the detected header (None: positional/none)
+    columns: dict[str, str] = Field(default_factory=dict)  # field -> header text it was read from
+    learners: int = 0  # name rows parsed
+    inactive: int = 0  # of which inactive (red rows or a "left" status)
+    red_rows: int = 0  # of which red-filled
+    kept: int = 0  # learners from this tab that won de-duplication
+
+
 class Snapshot(BaseModel):
     learners: list[LearnerRecord] = Field(default_factory=list)
+    tabs: dict[str, TabStats] = Field(default_factory=dict)
     fetched_at: datetime
     source: str
     origin: str = ""  # source origin + tab filter; a cache from a different origin is ignored

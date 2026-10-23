@@ -10,6 +10,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from ..models import TabStats
+
 
 class LookupRequest(BaseModel):
     query: str = Field(min_length=1, max_length=120)
@@ -40,3 +42,5 @@ class HealthResponse(BaseModel):
     learners_cached: int
     data_updated_at: datetime | None
     last_sync_error: str | None
+    # Per-tab parse counts; only on the admin endpoint (tab names are internal).
+    tabs: dict[str, TabStats] | None = None

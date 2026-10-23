@@ -138,3 +138,33 @@ def test_real_5_potok_layout_parent_columns_first():
     dump = snap.model_dump_json()
     for secret in ("Тестова Мама", "87000000001", "mama@example.com", "7 (700) 000-00-01", "01.01.2014"):
         assert secret not in dump
+
+
+def test_tab_stats_are_logged_and_on_the_admin_endpoint(tmp_path, monkeypatch, caplog):
+    from fastapi.testclient import TestClient
+
+    from app.core.config import Settings
+    from app.main import create_app
+    from app.sources import GoogleSheetsSource
+
+    monkeypatch.setattr(GoogleSheetsSource, "fetch", lambda self: xlsx_to_tabs(workbook()))
+    settings = Settings(data_source="google", google_sheet_id="id", google_credentials_json="{}",
+                        cache_file=tmp_path / "c.json", admin_token="secret")
+    with caplog.at_level("INFO"), TestClient(create_app(settings)) as c:
+        assert c.get("/api/health").json().get("tabs") is None  # public: no tab details
+        assert c.post("/api/admin/refresh").status_code == 404
+        tabs = c.post("/api/admin/refresh", headers={"X-Admin-Token": "secret"}).json()["tabs"]
+    assert tabs["5 поток"] == {
+        "rows": 4, "header_row": 1,
+        "columns": {"full_name": "Name", "default_email": "TUMO email", "coach_name": "Coach",
+                    "days": "Дни", "time": "Время"},
+        "learners": 3, "inactive": 1, "red_rows": 1, "kept": 2,
+    }
+    assert tabs["4 поток"]["learners"] == 4 and tabs["4 поток"]["red_rows"] == 2
+    line = next(r.getMessage() for r in caplog.records if r.getMessage().startswith("Tab '5 поток'"))
+    assert "3 learners (1 inactive, 1 red), 2 kept" in line
+    assert "Петров" not in caplog.text and "П. О." in line  # initials only, never full names
+
+
+def test_batch_number_tolerates_spacing():
+    assert {batch_number(t) for t in ("5 поток", "5  поток", "5поток", "5_поток", " 5 Поток ")} == {5}

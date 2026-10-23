@@ -34,7 +34,7 @@ import unicodedata
 from datetime import datetime, timezone
 from typing import Any
 
-from ..models import LearnerRecord, Snapshot
+from ..models import LearnerRecord, Snapshot, TabStats
 
 log = logging.getLogger(__name__)
 
@@ -469,15 +469,21 @@ def _cell(row: list[Any], idx: int | None) -> str:
     return clean_text(row[idx]) if idx is not None and idx < len(row) else ""
 
 
-def parse_grid(tab: str, grid: Grid) -> list[LearnerRecord]:
+def parse_grid(tab: str, grid: Grid, stats: TabStats | None = None) -> list[LearnerRecord]:
+    stats = stats if stats is not None else TabStats()
+    stats.rows = len(grid)
     start, fields, extras = detect_columns(grid)
+    if start:
+        stats.header_row = start
+        header = grid[start - 1]
+        stats.columns = {f: clean_text(header[i]) for f, i in fields.items() if i < len(header)}
     if "full_name" not in fields:
         return []
     positional = start == 0
     waitlist_tab = is_waitlist_tab(tab)
     safe_extras = extras  # detect_columns already excluded sensitive headers
 
-    learners = []
+    learners: list[LearnerRecord] = []
     for row in grid[start:]:
         # Without a header we can't tell a learner from a note or title line by column name,
         # so require a row that actually looks like a record (name plus a couple of fields).
@@ -488,6 +494,8 @@ def parse_grid(tab: str, grid: Grid) -> list[LearnerRecord]:
         tokens = name_tokens(full_name)
         if len(tokens) < 2:  # blank rows, section titles, single-word junk
             continue
+        red = _row_is_red(row, fields.get("full_name"))
+        stats.red_rows += red
         email = get("default_email")
         schedule = get("schedule") or " ".join(p for p in (get("days"), get("time")) if p)
         status = get("status")
@@ -508,15 +516,19 @@ def parse_grid(tab: str, grid: Grid) -> list[LearnerRecord]:
                 temp_password=get("temp_password"),
                 tumo_id=get("tumo_id"),
                 status=status,
-                status_code=(
-                    "inactive" if _row_is_red(row, fields.get("full_name"))
-                    else _status_code(status, schedule, waitlist_tab)
-                ),
+                status_code="inactive" if red else _status_code(status, schedule, waitlist_tab),
                 extra_info=extra,
                 tab=tab,
             )
         )
+    stats.learners = len(learners)
+    stats.inactive = sum(not r.active for r in learners)
     return learners
+
+
+def _initials(name: str) -> str:
+    """'Тұрдықұл Ғарифулла Рахманқұлұлы' -> 'Т. Ғ. Р.' (logs never carry full names)."""
+    return " ".join(w[0] + "." for w in name.split() if w)
 
 
 def _tab_key(title: str) -> str:
@@ -545,11 +557,11 @@ _MERGEABLE = (
 )
 
 
-_BATCH = re.compile(r"(\d+)\s*(?:поток|ағын|batch|flow)", re.IGNORECASE)
+_BATCH = re.compile(r"(\d+)[\s_\-]*(?:поток|ағын|batch|flow)", re.IGNORECASE)
 
 
 def batch_number(tab: str) -> int:
-    """'5 поток' -> 5, 'MAIN - 4 Поток (лист ожидания)' -> 4; 0 when the title has none."""
+    """'5 поток', '5поток', '5_поток' -> 5; 'MAIN - 4 Поток (лист ожидания)' -> 4; else 0."""
     m = _BATCH.search(tab)
     return int(m.group(1)) if m else 0
 
@@ -572,8 +584,10 @@ def parse_tabs(raw: RawTabs, source: str, tab_filter: str = "") -> Snapshot:
     by_id: dict[str, LearnerRecord] = {}
     by_name: dict[str, LearnerRecord] = {}
     tabs = _tab_priority(select_tabs(list(raw), tab_filter))
+    stats: dict[str, TabStats] = {}
     for tab in tabs:
-        for rec in parse_grid(tab, raw[tab]):
+        stats[tab] = TabStats()
+        for rec in parse_grid(tab, raw[tab], stats[tab]):
             id_key = normalize_tumo_id(rec.tumo_id)
             name_key = " ".join(sorted(rec.tokens))
             first = (by_id.get(id_key) if id_key else None) or by_name.get(name_key)
@@ -596,4 +610,14 @@ def parse_tabs(raw: RawTabs, source: str, tab_filter: str = "") -> Snapshot:
             by_name[name_key] = rec
             if id_key:
                 by_id[id_key] = rec
-    return Snapshot(learners=learners, fetched_at=datetime.now(timezone.utc), source=source)
+    for rec in learners:
+        stats[rec.tab].kept += 1
+    for tab in tabs:
+        st = stats[tab]
+        samples = [_initials(r.full_name) for r in learners if r.tab == tab][:3]
+        log.info(
+            "Tab %r: %d rows, header row %s %s, %d learners (%d inactive, %d red), %d kept; e.g. %s",
+            tab, st.rows, st.header_row, st.columns, st.learners, st.inactive, st.red_rows, st.kept,
+            ", ".join(samples) or "-",
+        )
+    return Snapshot(learners=learners, tabs=stats, fetched_at=datetime.now(timezone.utc), source=source)

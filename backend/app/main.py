@@ -85,7 +85,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not settings.admin_token or not hmac.compare_digest(x_admin_token, settings.admin_token):
             raise HTTPException(404)
         await store.refresh_async()
-        return health()
+        report = health()
+        snap = store.snapshot
+        report.tabs = snap.tabs if snap else {}  # per-tab counts help debug a tab that "isn't found"
+        return report
 
     # Optionally serve the built Vue app (frontend/dist) so everything deploys as one process.
     static_dir = settings.static_dir
