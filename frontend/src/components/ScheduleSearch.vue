@@ -125,5 +125,24 @@ const updatedAt = computed(() => {
         </li>
       </ol>
     </div>
+
+    <!-- How to find the entrance on the first day (map image has its text in Russian). -->
+    <div class="mt-8 grid items-center gap-5 sm:mt-10 sm:grid-cols-[minmax(0,20rem)_1fr] sm:gap-8">
+      <img
+        src="/how-to-get-there.jpg"
+        :alt="t.search.entrance.alt"
+        width="1413"
+        height="2000"
+        loading="lazy"
+        class="h-auto w-full rounded-3xl border-2 border-brand-100"
+      />
+      <div>
+        <h3 class="font-display text-lg font-black text-ink sm:text-xl">{{ t.search.entrance.title }}</h3>
+        <p class="mt-3 text-base leading-relaxed text-slate-700">{{ t.search.entrance.text }}</p>
+        <p class="mt-4 rounded-2xl bg-brand-50 px-4 py-3 text-base font-bold text-brand-600">
+          {{ t.search.entrance.nothingToBring }}
+        </p>
+      </div>
+    </div>
   </section>
 </template>
