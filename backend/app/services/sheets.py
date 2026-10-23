@@ -274,27 +274,90 @@ def clean_text(value: Any) -> str:
     return ", ".join(line for line in lines if line)
 
 
+# Latin letters that look like (folded) Cyrillic ones; typed Kazakh names often mix them in,
+# e.g. Latin "i" for "і" or "o" in "Тoребек". Only applied inside words that contain Cyrillic.
+_LATIN_LOOKALIKES = str.maketrans("aceopxyikmthb", "асеорхуикмтнв")
+# Zero-width spaces/joiners, soft hyphens and BOMs pasted into cells would split a word in two.
+_INVISIBLE = re.compile("[\u00ad\u200b-\u200f\u2060\ufeff]")
+
+
 def name_tokens(name: str) -> list[str]:
     """Normalize a name into comparable tokens.
 
-    Case-insensitive; folds Kazakh letters (ө ү ұ қ ғ һ і ң ә), ё→е, й→и and Latin diacritics;
-    ignores punctuation and repeated spaces. The sheet and the query both go through this.
+    Case-insensitive; folds Kazakh letters (ө ү ұ қ ғ һ і ң ә), ё→е, й→и, Latin diacritics and
+    Latin look-alike letters inside Cyrillic words; ignores punctuation and repeated spaces.
+    The sheet and the query both go through this.
     """
-    s = name.casefold().translate(_KK_FOLD)
+    s = _INVISIBLE.sub("", name).casefold().translate(_KK_FOLD)  # "Тұрды\u200bқұл" is one word
     s = unicodedata.normalize("NFKD", s)
     s = "".join(ch for ch in s if not unicodedata.combining(ch))
-    return re.findall(r"\w+", s)
+    return [
+        t.translate(_LATIN_LOOKALIKES) if re.search("[а-я]", t) and re.search("[a-z]", t) else t
+        for t in re.findall(r"\w+", s)
+    ]
+
+
+def _one_edit(a: str, b: str) -> bool:
+    """True when a and b differ by at most one inserted, deleted, replaced or swapped letter."""
+    if a == b:
+        return True
+    if abs(len(a) - len(b)) > 1:
+        return False
+    i = 0
+    while i < min(len(a), len(b)) and a[i] == b[i]:
+        i += 1
+    if len(a) == len(b):
+        return a[i + 1 :] == b[i + 1 :] or (a[i + 2 :] == b[i + 2 :] and a[i : i + 2] == b[i : i + 2][::-1])
+    return a[i:] == b[i + 1 :] if len(a) < len(b) else a[i + 1 :] == b[i:]
+
+
+TYPO_MIN_LEN = 5  # shorter words must be typed exactly: one letter off would match too much
+
+
+def _token_hit(q: str, t: str, typos: bool) -> bool:
+    if t.startswith(q):
+        return True
+    # "гарифула" vs "гарифулла": compare with the record word's start of about the same length.
+    return typos and len(q) >= TYPO_MIN_LEN and any(_one_edit(q, t[: len(q) + d]) for d in (-1, 0, 1))
+
+
+def match_count(query_tokens: list[str], record_tokens: list[str], typos: bool = False) -> int:
+    """How many query tokens are a prefix of a *different* name token (any order)."""
+    available = list(record_tokens)
+    count = 0
+    for q in sorted(query_tokens, key=len, reverse=True):  # longest first avoids greedy mis-pairing
+        hit = next((i for i, t in enumerate(available) if _token_hit(q, t, typos)), None)
+        if hit is not None:
+            available.pop(hit)
+            count += 1
+    return count
 
 
 def matches(query_tokens: list[str], record_tokens: list[str]) -> bool:
     """Every query token must be a prefix of a *different* name token (any order)."""
-    available = list(record_tokens)
-    for q in sorted(query_tokens, key=len, reverse=True):  # longest first avoids greedy mis-pairing
-        hit = next((i for i, t in enumerate(available) if t.startswith(q)), None)
-        if hit is None:
-            return False
-        available.pop(hit)
-    return True
+    return match_count(query_tokens, record_tokens) == len(query_tokens)
+
+
+def find_learners(query_tokens: list[str], learners: list[LearnerRecord]) -> list[LearnerRecord]:
+    """Best matches for a name query, from strictest to most forgiving:
+
+    1. exact prefixes ("Турдыкул Гарифулла" or "Тур Гар" finds "Тұрдықұл Ғарифулла Рахманқұлұлы");
+    2. the same, allowing one typo in words of 5+ letters ("Гарифула").
+
+    Two-word queries need both words; with three or more words, any two are enough, so a
+    patronymic the sheet lacks or spells differently doesn't hide the student. Within a step,
+    only the records matching the most words are returned.
+    """
+    if not query_tokens:
+        return []
+    need = len(query_tokens) if len(query_tokens) <= 2 else 2
+    for typos in (False, True):
+        scored = [(match_count(query_tokens, r.tokens, typos), r) for r in learners]
+        scored = [(n, r) for n, r in scored if n >= need]
+        if scored:
+            best = max(n for n, _ in scored)
+            return [r for n, r in scored if n == best]
+    return []
 
 
 def normalize_tumo_id(value: str) -> str:

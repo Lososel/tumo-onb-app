@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .models import LearnerRecord, Snapshot
-from .services.sheets import SheetsConfigError, matches, parse_tabs
+from .services.sheets import SheetsConfigError, find_learners, parse_tabs
 from .sources import DataSource
 
 log = logging.getLogger(__name__)
@@ -60,7 +60,7 @@ class LearnerStore:
         snap = self._snapshot
         if snap is None or not query_tokens:
             return []
-        return [r for r in snap.learners if matches(query_tokens, r.tokens)]
+        return find_learners(query_tokens, snap.learners)
 
     # ---------- writes ----------
 
