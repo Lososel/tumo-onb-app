@@ -112,3 +112,29 @@ def test_red_detection(rgb, red):
 
 def test_batch_number():
     assert [batch_number(t) for t in ("5 поток", "MAIN - 4 Поток (лист ожидания)", "Сводка")] == [5, 4, 0]
+
+
+def test_real_5_potok_layout_parent_columns_first():
+    """The live "5 поток" tab's header row (parent data first, empty column, account note last)."""
+    header = ["ФИО РОДИТЕЛЯ", "Номер родителя", "почта родителя", "ФИО ребенка", "Номер ребенка",
+              "ДР ребенка", "Расписание", "Коуч", None, "Зона обучения", "Почта тумо",
+              "Создан аккаунт с графиком и коучем"]
+    row = ["Тестова Мама", "87000000001", "mama@example.com", "ПРИМЕРОВ ДИЛЬДАР", "7 (700) 000-00-01",
+           "01.01.2014", "Вторник, Пятница : 10:30–12:30", "Дана Телжан", None, "WR 2",
+           "dildar.primerov@tumo.world", None]
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "5 поток"
+    ws.append(header)
+    ws.append(row)
+    buf = io.BytesIO()
+    wb.save(buf)
+    snap = parse_tabs(xlsx_to_tabs(buf.getvalue()), source="google")
+    (rec,) = snap.learners
+    assert (rec.full_name, rec.schedule, rec.coach_name, rec.room, rec.default_email) == (
+        "ПРИМЕРОВ ДИЛЬДАР", "Вторник, Пятница : 10:30–12:30", "Дана Телжан", "WR 2",
+        "dildar.primerov@tumo.world",
+    )
+    dump = snap.model_dump_json()
+    for secret in ("Тестова Мама", "87000000001", "mama@example.com", "7 (700) 000-00-01", "01.01.2014"):
+        assert secret not in dump
