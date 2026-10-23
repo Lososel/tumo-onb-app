@@ -137,6 +137,24 @@ def xlsx_to_tabs(data: bytes, tab_filter: str = "") -> RawTabs:
 MAX_BLANK_ROWS = 1000
 
 
+class XlsxRow(list):
+    """A row of cell values that also remembers which columns have a red fill."""
+
+    red: frozenset[int] = frozenset()
+
+
+def _is_red(fill: Any) -> bool:
+    """Solid red or light-red fill ("FF0000", "EA9999", "F4CCCC", Excel's "FFC7CE"); not orange,
+    pink, peach or yellow."""
+    if fill is None or getattr(fill, "fill_type", None) != "solid":
+        return False
+    rgb = getattr(getattr(fill, "fgColor", None), "rgb", None)
+    if not isinstance(rgb, str) or not re.fullmatch(r"[0-9A-Fa-f]{6,8}", rgb):
+        return False  # theme/indexed colours: can't tell, so not red
+    r, g, b = (int(rgb[-6:][i : i + 2], 16) for i in (0, 2, 4))
+    return r >= 0xC8 and r - max(g, b) >= 0x20 and abs(g - b) <= 0x20
+
+
 def _xlsx_grid(ws: Any) -> Grid:
     """Cell values of one tab, without the empty padding a formatted sheet can carry.
 
@@ -145,13 +163,16 @@ def _xlsx_grid(ws: Any) -> Grid:
     exhaust a small server's memory. So the declared size is ignored, trailing empty cells are
     trimmed, empty rows are skipped (header detection doesn't need them) and reading stops after
     MAX_BLANK_ROWS empty rows in a row.
+
+    Rows come back as XlsxRow, carrying which columns are filled red: staff highlight learners who
+    left in red, and parse_grid marks those rows inactive.
     """
     if hasattr(ws, "reset_dimensions"):
         ws.reset_dimensions()
     grid: Grid = []
     blank = 0
-    for row in ws.iter_rows(values_only=True):
-        cells = [_xlsx_cell(v) for v in row]
+    for row in ws.iter_rows():
+        cells = XlsxRow(_xlsx_cell(getattr(c, "value", c)) for c in row)
         while cells and not cells[-1].strip():
             cells.pop()
         if not cells:
@@ -160,8 +181,22 @@ def _xlsx_grid(ws: Any) -> Grid:
                 break
             continue
         blank = 0
+        cells.red = frozenset(
+            i for i, c in enumerate(row) if i < len(cells) and _is_red(getattr(c, "fill", None))
+        )
         grid.append(cells)
     return grid
+
+
+def _row_is_red(row: Any, name_idx: int | None) -> bool:
+    """Red when the name cell is red, or at least half of the row's filled cells are."""
+    red = getattr(row, "red", None)
+    if not red:
+        return False
+    if name_idx in red:
+        return True
+    filled = [i for i, c in enumerate(row) if clean_text(c)]
+    return bool(filled) and 2 * sum(1 for i in filled if i in red) >= len(filled)
 
 
 # A grid is the tab's cell values, top row first. RawTabs maps tab title -> grid.
@@ -171,7 +206,10 @@ RawTabs = dict[str, Grid]
 # Order matters: it is also the positional fallback when a tab has no header row.
 FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "full_name": ("full name", "fullname", "name", "фио", "аты жөні", "имя фамилия", "учащийся", "ученик"),
-    "schedule": ("schedule", "расписание", "график", "кесте"),
+    "schedule": (
+        "schedule", "расписание", "график", "кесте", "дни и время", "день и время", "days and time",
+        "күні мен уақыты",
+    ),
     "coach_name": ("coach", "coach name", "коуч", "куратор"),
     "room": (
         "room", "кабинет", "комната", "аудитория", "бөлме", "зона", "zone", "learning zone",
@@ -185,6 +223,9 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "tumo_id": ("tumo id", "id", "tumo айди"),
     "status": ("status", "статус"),
     "prev_coach_name": ("ex coach", "previous coach", "бывший коуч", "предыдущий коуч", "старый коуч"),
+    # Some tabs split the schedule into two columns; they are joined when there is no "Расписание".
+    "days": ("дни", "дни занятий", "дни недели", "days", "күндері", "сабақ күндері"),
+    "time": ("время", "время занятий", "time", "уақыт", "уақыты", "сабақ уақыты"),
 }
 POSITIONAL_FIELDS = list(FIELD_ALIASES)[:7]  # status / prev coach are never assumed positionally
 
@@ -200,6 +241,7 @@ _SENSITIVE_HEADER = re.compile(
     re.IGNORECASE,
 )
 _IIN_VALUE = re.compile(r"^\d{12}$")
+_NOT_LESSON_TIME = re.compile(r"отметк|timestamp|дата|date|создан|submitted")
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 # Kazakh-specific letters folded to their closest Russian letter, so "нуртас" matches "Нұртас".
@@ -293,6 +335,10 @@ def _match_header_scored(header: Any) -> tuple[str, int] | None:
         for field, aliases in FIELD_ALIASES.items()
         if any(all(_word_in(a, words) for a in alias.split()) for alias in aliases)
     }
+    if "schedule" in hits:  # "Дни и время занятий" is one schedule column, not days or time
+        hits -= {"days", "time"}
+    if hits == {"time"} and _NOT_LESSON_TIME.search(h):  # Google Forms' "Отметка времени"
+        return None
     return (hits.pop(), PARTIAL) if len(hits) == 1 else None
 
 
@@ -380,7 +426,7 @@ def parse_grid(tab: str, grid: Grid) -> list[LearnerRecord]:
         if len(tokens) < 2:  # blank rows, section titles, single-word junk
             continue
         email = get("default_email")
-        schedule = get("schedule")
+        schedule = get("schedule") or " ".join(p for p in (get("days"), get("time")) if p)
         status = get("status")
         extra = {}
         for i, header in safe_extras.items():
@@ -399,7 +445,10 @@ def parse_grid(tab: str, grid: Grid) -> list[LearnerRecord]:
                 temp_password=get("temp_password"),
                 tumo_id=get("tumo_id"),
                 status=status,
-                status_code=_status_code(status, schedule, waitlist_tab),
+                status_code=(
+                    "inactive" if _row_is_red(row, fields.get("full_name"))
+                    else _status_code(status, schedule, waitlist_tab)
+                ),
                 extra_info=extra,
                 tab=tab,
             )
@@ -433,23 +482,44 @@ _MERGEABLE = (
 )
 
 
+_BATCH = re.compile(r"(\d+)\s*(?:поток|ағын|batch|flow)", re.IGNORECASE)
+
+
+def batch_number(tab: str) -> int:
+    """'5 поток' -> 5, 'MAIN - 4 Поток (лист ожидания)' -> 4; 0 when the title has none."""
+    m = _BATCH.search(tab)
+    return int(m.group(1)) if m else 0
+
+
+def _tab_priority(tabs: list[str]) -> list[str]:
+    """Order in which duplicates are resolved: main tabs before waitlist tabs, and within each the
+    newest batch first ("5 поток" before "4 поток"); otherwise the workbook's order."""
+    return sorted(tabs, key=lambda t: (is_waitlist_tab(t), -batch_number(t)))
+
+
 def parse_tabs(raw: RawTabs, source: str, tab_filter: str = "") -> Snapshot:
     """Parse the selected tabs into one learner list, each student exactly once.
 
     Duplicates are recognised by TUMO ID or, failing that, by normalized full name (order,
-    case, spacing and Kazakh letters ignored). The first row wins; empty fields on it are
-    filled from later duplicates.
+    case, spacing and Kazakh letters ignored). The row from the highest-priority tab wins (see
+    _tab_priority), except that an active row always beats an inactive (e.g. red) one; empty
+    fields on the winner are filled from the other rows.
     """
     learners: list[LearnerRecord] = []
     by_id: dict[str, LearnerRecord] = {}
     by_name: dict[str, LearnerRecord] = {}
-    # Main tabs before waitlist tabs: a learner listed in both shows their main-tab row.
-    tabs = sorted(select_tabs(list(raw), tab_filter), key=is_waitlist_tab)
+    tabs = _tab_priority(select_tabs(list(raw), tab_filter))
     for tab in tabs:
         for rec in parse_grid(tab, raw[tab]):
             id_key = normalize_tumo_id(rec.tumo_id)
             name_key = " ".join(sorted(rec.tokens))
             first = (by_id.get(id_key) if id_key else None) or by_name.get(name_key)
+            if first is not None and not first.active and rec.active:
+                # e.g. red (left) in "4 поток" but enrolled in "5 поток": the active row wins.
+                first_copy = first.model_copy()
+                for f in LearnerRecord.model_fields:
+                    setattr(first, f, getattr(rec, f))
+                rec = first_copy  # the old row only fills gaps below
             if first is not None:
                 for f in _MERGEABLE:
                     if not getattr(first, f) and getattr(rec, f):
