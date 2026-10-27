@@ -75,6 +75,10 @@ class Settings:
     # EXPOSE_TEMP_PASSWORD: include the sheet's temporary password in lookup responses.
     # Off unless explicitly enabled; turn it off again once onboarding is over.
     expose_temp_password: bool = False
+    # DEFAULT_TEMP_PASSWORD: the shared first-login password of new TUMO accounts, shown on every
+    # found learner's card (a per-learner sheet password, when exposed, takes precedence).
+    # Kept in the environment, not in git or the frontend bundle. Empty = not shown.
+    default_temp_password: str = field(default="", repr=False)
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -106,4 +110,5 @@ class Settings:
             admin_token=env("ADMIN_TOKEN", "").strip(),
             static_dir=_resolve(env("STATIC_DIR", "../frontend/dist")),
             expose_temp_password=env("EXPOSE_TEMP_PASSWORD", "false").strip().lower() not in _FALSE,
+            default_temp_password=env("DEFAULT_TEMP_PASSWORD", "").strip(),
         )

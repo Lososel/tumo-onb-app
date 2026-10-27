@@ -267,3 +267,19 @@ def test_xml_bomb_workbook_is_rejected_not_expanded():
     bomb = sheet.format(doctype=f'<!DOCTYPE x [<!ENTITY a "aaaaaaaaaa">{entities}]>', text="&i;")
     with pytest.raises(SheetsConfigError):
         xlsx_to_tabs(workbook(bomb))
+
+
+# ---------- 6. shared default temporary password ----------
+
+
+def test_default_temp_password_is_shown_only_when_configured(make_client, monkeypatch):
+    with make_client() as c:
+        assert lookup(c, "Иванова Анна").json()["results"][0]["temp_password"] is None
+    with make_client(default_temp_password="Tuser-0000") as c:
+        assert lookup(c, "Иванова Анна").json()["results"][0]["temp_password"] == "Tuser-0000"
+        assert "Tuser-0000" not in c.get("/api/health").text
+        assert "Tuser-0000" not in lookup(c, "Неизвестный Человек").text
+    monkeypatch.setenv("DEFAULT_TEMP_PASSWORD", "  Tuser-0000 ")
+    settings = Settings.from_env()
+    assert settings.default_temp_password == "Tuser-0000"
+    assert "Tuser-0000" not in repr(settings)  # never in logs/tracebacks

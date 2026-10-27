@@ -68,6 +68,7 @@ def to_card(
     expose_temp_password: bool,
     coaches: CoachDirectory | None = None,
     email_domains: tuple[str, ...] = ("tumo.world",),
+    default_temp_password: str = "",
 ) -> ScheduleCard:
     """Map an internal record to the public card. tumo_id and extra_info are never copied.
 
@@ -83,7 +84,7 @@ def to_card(
         coach_email=coach_email,
         room=r.room or PENDING,
         default_email=_student_email(r.default_email, email_domains) or PENDING,
-        temp_password=(r.temp_password or None) if expose_temp_password else None,
+        temp_password=(r.temp_password if expose_temp_password else "") or default_temp_password or None,
         status_code=r.status_code,
         status=r.status or None,
     )
@@ -123,7 +124,10 @@ def _lookup(
     return LookupResponse(
         status="ok",
         results=[
-            to_card(r, settings.expose_temp_password, coaches, settings.student_email_domains)
+            to_card(
+                r, settings.expose_temp_password, coaches, settings.student_email_domains,
+                settings.default_temp_password,
+            )
             for r in active
         ],
         data_updated_at=updated,

@@ -64,5 +64,9 @@ services:
       # anyone who knows a learner's full name can see their temporary password.
       - key: EXPOSE_TEMP_PASSWORD
         value: "false"
+      # Shared first-login password of new TUMO accounts, shown on every found learner's card.
+      # Set the value in the Render dashboard (kept out of git); leave empty to hide the field.
+      - key: DEFAULT_TEMP_PASSWORD
+        sync: false
       - key: ADMIN_TOKEN
         generateValue: true

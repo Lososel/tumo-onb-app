@@ -44,14 +44,13 @@ const fields = computed(() => [
   { label: t.value.card.email, value: known(props.learner.default_email) },
 ])
 
-// Temporary password: masked until the learner asks to see it; re-masked for every new result.
+// Temporary password for the first login, with a copy button.
 const passwordLabelId = useId()
-const revealed = ref(false)
+const passwordEl = ref<HTMLElement | null>(null)
 const copied = ref(false)
 watch(
   () => props.learner,
   () => {
-    revealed.value = false
     copied.value = false
   },
 )
@@ -63,7 +62,9 @@ async function copyPassword() {
     copied.value = true
     setTimeout(() => (copied.value = false), 2000)
   } catch {
-    revealed.value = true // clipboard blocked: show it so it can be copied by hand
+    // Clipboard blocked (old browser / no HTTPS): select the text so it can be copied by hand.
+    const el = passwordEl.value
+    if (el) window.getSelection()?.selectAllChildren(el)
   }
 }
 </script>
@@ -101,20 +102,14 @@ async function copyPassword() {
       </p>
       <div class="mt-2 flex flex-wrap items-center gap-2 sm:gap-3">
         <code
+          ref="passwordEl"
           :aria-labelledby="passwordLabelId"
-          class="w-full min-w-0 overflow-x-auto rounded-xl bg-white px-4 py-2.5 font-mono text-lg tracking-wider whitespace-nowrap text-ink sm:w-auto sm:flex-1"
-        >{{ revealed ? learner.temp_password : '••••••••' }}</code>
+          class="w-full min-w-0 overflow-x-auto rounded-xl bg-white px-4 py-2.5 font-mono text-lg tracking-wider whitespace-nowrap text-ink select-all sm:w-auto sm:flex-1"
+        >{{ learner.temp_password }}</code>
         <button
           type="button"
-          :aria-pressed="revealed"
-          class="rounded-full bg-ink px-4 py-2.5 text-sm font-bold text-white transition hover:bg-black"
-          @click="revealed = !revealed"
-        >
-          {{ revealed ? t.card.hide : t.card.show }}
-        </button>
-        <button
-          type="button"
-          class="rounded-full border-2 border-ink px-4 py-2 text-sm font-bold text-ink transition hover:bg-ink hover:text-white"
+          class="rounded-full bg-ink px-5 py-2.5 text-sm font-bold text-white transition hover:bg-black"
+          aria-live="polite"
           @click="copyPassword"
         >
           {{ copied ? t.card.copied : t.card.copy }}
